@@ -91,10 +91,11 @@ namespace NeuralNetwork
 			firstLayer.Forward(input, Training);
 		}
 
-		public void Forward(Array input)
+		public Tensor Forward(Array input)
 		{
 			firstLayer.Forward(Tensor.
 			AddBatchDimension(input), Training);
+			return loss.Predicted;
 		}
 
 		public void BackPropBatch(Tensor ideal)
@@ -113,11 +114,11 @@ namespace NeuralNetwork
 			BackPropBatch(Tensor.AddBatchDimension(ideal));
 		}
 
-		public void Train(Tensor[] forwardData, Tensor[] backPropData, byte epochsToTrain = 1)
+		public void Train(Tensor[] forwardData, Tensor[] backPropData, int epochsToTrain = 1)
 		{
 			Training = true;
 
-			for (byte epoch = 0; epoch < epochsToTrain; epoch++)
+			for (int epoch = 0; epoch < epochsToTrain; epoch++)
 			{
 				for (int i = 0; i < forwardData.Length; i++)
 				{
@@ -131,7 +132,7 @@ namespace NeuralNetwork
 			Training = false;
 		}
 
-		public void Train(Array[] forwardData, Array[] backPropData, byte epochsToTrain = 1)
+		public void Train(Array[] forwardData, Array[] backPropData, int epochsToTrain = 1)
 		{
 			Tensor[] batchesForward = Tensor.GetTrainBatches(forwardData, firstLayer.inputShape.batchSize);
 			Tensor[] batchesBackProp = Tensor.GetTrainBatches(backPropData, firstLayer.inputShape.batchSize);

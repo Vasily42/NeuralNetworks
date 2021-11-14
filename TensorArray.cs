@@ -13,10 +13,15 @@ namespace NeuralNetwork
 		protected GCHandle pin;
 		protected float* ptr;
 
-		public Tensor(int batchSize, int xLength,
+		protected Tensor(int batchSize, int xLength,
 		int channels = 0, int yLength = 0, int zLength = 0, int wLength = 0)
 		{
 			shape = new ShapeInfo(batchSize, xLength, channels, yLength, zLength, wLength);
+		}
+
+		protected Tensor(ShapeInfo info)
+		{
+			shape = info;
 		}
 
 		~Tensor()
@@ -29,6 +34,30 @@ namespace NeuralNetwork
 			pin = GCHandle.Alloc(array, GCHandleType.Pinned);
 
 			ptr = (float*)pin.AddrOfPinnedObject();
+		}
+		
+		public static Tensor CreateWithRef(Array array)
+		{
+			switch (array.Rank)
+			{
+				case 2:
+				return new Tensor1(array as float[,]);
+				
+				case 3:
+				return new Tensor2(array as float[,,]);
+				
+				case 4:
+				return new Tensor3(array as float[,,,]);
+				
+				case 5:
+				return new Tensor4(array as float[,,,,]);
+				
+				case 6:
+				return new Tensor5(array as float[,,,,,]);
+			
+			    default:
+			    throw new Exception();
+			}
 		}
 
 		public static Tensor Create(ShapeInfo shape)
@@ -176,26 +205,28 @@ namespace NeuralNetwork
 			return tensor;
 		}
 
-		public static Tensor[] GetTrainBatches(Array[] trainData, int miniBatchSize)
+        public static Tensor[] GetTrainBatches(dynamic[] trainData, int miniBatchSize)
+        {
+        	Tensor[] tensorTrainData = new Tensor[trainData.Length];
+        	
+            var shape = ShapeInfo.GetInfo(trainData[0]);
+        	
+        	for(int i = 0; i < trainData.Length; i++)
+        	{
+        		tensorTrainData[i] = Tensor.Create(shape);
+        	    tensorTrainData[i].Assimilate(trainData[i]);
+        	}
+        	
+        	return GetTrainBatches(tensorTrainData, miniBatchSize);
+        }
+
+		public static Tensor[] GetTrainBatches(Tensor[] trainData, int miniBatchSize)
 		{
 			Tensor[] tensorBatches = new Tensor[(int)Math.Ceiling((double)trainData.Length / miniBatchSize)];
 
 			int lastBatchSize = trainData.Length % miniBatchSize;
 
-			int rank = trainData[0].Rank;
-
-			Tensor.ShapeInfo shape = new Tensor.ShapeInfo(miniBatchSize, trainData[0].GetLength(rank - 1),
-			(rank > 1 ? trainData[0].GetLength(0) : 0),
-			(rank > 2 ? trainData[0].GetLength(rank - 2) : 0),
-			(rank > 3 ? trainData[0].GetLength(rank - 3) : 0));
-
-			float*[] ptrArray = new float*[trainData.Length];
-
-			for (int t = 0; t < trainData.Length; t++)
-			{
-				GCHandle pin = GCHandle.Alloc(trainData[t], GCHandleType.Pinned);
-				ptrArray[t] = (float*)pin.AddrOfPinnedObject();
-			}
+			Tensor.ShapeInfo shape = trainData[0].shape.Change(miniBatchSize);
 
 			for (int tt = 0; tt < tensorBatches.Length - 1; tt++)
 			{
@@ -203,7 +234,9 @@ namespace NeuralNetwork
 				for (int b = 0, s = 0; b < miniBatchSize; b++)
 				{
 					for (int sb = 0; sb < shape.flatBatchSize; sb++, s++)
-						tensorBatches[tt][s] = ptrArray[tt * miniBatchSize][sb];
+					{
+						tensorBatches[tt][s] = trainData[tt][b, sb];
+					}
 				}
 			}
 
@@ -214,7 +247,7 @@ namespace NeuralNetwork
 				for (int b = 0, s = 0; b < lastBatchSize; b++)
 				{
 					for (int sb = 0; sb < lastShape.flatBatchSize; sb++, s++)
-						tensorBatches[^1][s] = ptrArray[^(lastBatchSize - b)][sb];
+						tensorBatches[^1][s] = trainData[^(lastBatchSize - b)][sb];
 				}
 			}
 			else
@@ -223,7 +256,7 @@ namespace NeuralNetwork
 				for (int b = 0, s = 0; b < miniBatchSize; b++)
 				{
 					for (int sb = 0; sb < shape.flatBatchSize; sb++, s++)
-						tensorBatches[^1][s] = ptrArray[^(miniBatchSize - b)][sb];
+						tensorBatches[^1][s] = trainData[^(miniBatchSize - b)][sb];
 				}
 			}
 
@@ -341,7 +374,18 @@ namespace NeuralNetwork
 				}
 			}
 
-			public static implicit operator int(ShapeInfo info) => info.flatBatchSize;
+			public static explicit operator int(ShapeInfo info) => info.flatBatchSize;
+			
+			public static implicit operator ShapeInfo ((int batchSize, int xLength) tupl) 
+			=> new ShapeInfo(tupl.batchSize, tupl.xLength);
+			public static implicit operator ShapeInfo ((int batchSize, int channel, int xLength) tupl) 
+			=> new ShapeInfo(tupl.batchSize, tupl.xLength, tupl.channel);
+			public static implicit operator ShapeInfo ((int batchSize, int channel, int yLength, int xLength) tupl)
+			=> new ShapeInfo(tupl.batchSize, tupl.xLength, tupl.channel, tupl.yLength);
+			public static implicit operator ShapeInfo ((int batchSize, int channel, int zLength, int yLength, int xLength) tupl)
+			=> new ShapeInfo(tupl.batchSize, tupl.xLength, tupl.channel, tupl.yLength, tupl.zLength);
+			public static implicit operator ShapeInfo ((int batchSize, int channel, int wLength, int zLength, int yLength, int xLength) tupl)
+			=> new ShapeInfo(tupl.batchSize, tupl.xLength, tupl.channel, tupl.yLength, tupl.zLength, tupl.wLength);
 		}
 
 		public abstract Array ToArray();
@@ -358,6 +402,11 @@ namespace NeuralNetwork
 			PinAndRef(array1);
 		}
 
+		internal Tensor1(float[,] array) : base(ShapeInfo.GetInfo(array))
+		{
+			array1 = array;
+		}
+
 		public sealed override Array ToArray() => array1;
 	}
 
@@ -370,6 +419,11 @@ namespace NeuralNetwork
 			array2 = new float[batchSize, channels, xLength];
 
 			PinAndRef(array2);
+		}
+
+		internal Tensor2(float[,,] array) : base(ShapeInfo.GetInfo(array))
+		{
+			array2 = array;
 		}
 
 		public sealed override float this[int batch, int channel, int x]
@@ -392,6 +446,11 @@ namespace NeuralNetwork
 			PinAndRef(array3);
 		}
 
+		internal Tensor3(float[,,,] array) : base(ShapeInfo.GetInfo(array))
+		{
+			array3 = array;
+		}
+
 		public sealed override float this[int batch, int channel, int y, int x]
 		{
 			get => array3[batch, channel, y, x];
@@ -410,6 +469,11 @@ namespace NeuralNetwork
 			array4 = new float[batchSize, channels, zLength, yLength, xLength];
 
 			PinAndRef(array4);
+		}
+
+		internal Tensor4(float[,,,,] array) : base(ShapeInfo.GetInfo(array))
+		{
+			array4 = array;
 		}
 
 		public sealed override float this[int batch, int channel, int z, int y, int x]
@@ -431,6 +495,11 @@ namespace NeuralNetwork
 			array5 = new float[batchSize, channels, wLength, zLength, yLength, xLength];
 
 			PinAndRef(array5);
+		}
+
+		internal Tensor5(float[,,,,,] array) : base(ShapeInfo.GetInfo(array))
+		{
+			array5 = array;
 		}
 
 		public sealed override float this[int batch, int channel, int w, int z, int y, int x]
