@@ -26,15 +26,14 @@ namespace NeuralNetwork
 			this.kernelSize = kernelSize;
 			this.strides = strides;
 			if (padding != "valid")
+			{
 				paddingLayer = new Padding2D(padding, kernelSize, strides);
+                Apply(paddingLayer);
+			}
 		}
 
 		public sealed override void Init()
 		{
-			base.InsertActivation(activationName);
-			if (paddingLayer != null)
-				InsertBefore(paddingLayer);
-
 			int outXLength = (int)((inputShape.xLength - kernelSize.x) / (float)strides.x + 1);
 			int outYLength = (int)((inputShape.yLength - kernelSize.y) / (float)strides.y + 1);
 

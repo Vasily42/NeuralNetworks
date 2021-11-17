@@ -14,22 +14,33 @@ namespace NeuralNetwork
 		protected Tensor input, output, inputDerivatives, outputDerivatives;
 
 		internal Tensor.ShapeInfo inputShape, outputShape;
+		
+		internal Layer Leave => nextLayer == null? this : nextLayer.Leave;
+		
+		internal Layer Root => prevLayer == null? this : prevLayer.Root;
 
 		public Layer Apply(Layer prevLayer)
 		{
-			this.prevLayer = prevLayer;
-			prevLayer.nextLayer = this;
-			return this;
+			var temp = prevLayer.Leave;
+			
+			temp.nextLayer = Root;
+			
+			Root.prevLayer = temp;
+			
+			return Leave;
 		}
-
+		
 		public virtual void Init() { }
 
 		public void InitGraph()
 		{
 			if (prevLayer != null)
+			{
 				this.inputShape = prevLayer.outputShape;
+			}
 
 			Init();
+			//Console.WriteLine(nextLayer);
 			nextLayer?.InitGraph();
 		}
 
@@ -43,34 +54,21 @@ namespace NeuralNetwork
 			nextLayer?.ParameterCorrection(optimizer, regularizer);
 		}
 
-		protected void InsertAhead(Layer layer)
-		{
-			if (nextLayer != null)
-			{
-				nextLayer.prevLayer = layer;
-				layer.nextLayer = this.nextLayer;
-			}
-			layer.prevLayer = this;
-			nextLayer = layer;
-		}
-
-		protected void InsertBefore(Layer layer)
-		{
-			if (this is Input) return;
-			layer.inputShape = prevLayer.outputShape;
-			prevLayer.nextLayer = layer;
-			layer.nextLayer = this;
-			layer.prevLayer = prevLayer;
-			prevLayer = layer;
-			prevLayer.Init();
-			this.inputShape = prevLayer.outputShape;
-		}
+		protected void InsertAhead(Layer layer) => layer.Apply(this);
 
 		protected void InsertActivation(string activationName = null)
 		{
 			if (activationName != null && activationName.ToLower() != "linear")
 				InsertAhead(ActivationLayer.CreateActivation(activationName));
 		}
+		
+	//	protected virtual void WriteWeights(BinaryWriter writer);
+		
+	//	protected virtual void WriteModel(BinaryWriter writer);
+		
+	//	protected abstract void ReadWeights(BinaryReader reader);
+		
+	//	public abstract void ReadModel(BinaryReader reader);
 
 		public virtual void Forward(Tensor input, in int actualMBSize, in bool training)
 		{

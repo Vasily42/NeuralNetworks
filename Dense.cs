@@ -20,8 +20,6 @@ namespace NeuralNetwork
 
 		public sealed override void Init()
 		{
-			base.InsertActivation(activationName);
-
 			outputShape = inputShape.Change(xLength: numOfNeurons);
 
 			base.fanIn = inputShape.xLength;

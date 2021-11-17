@@ -222,6 +222,8 @@ namespace NeuralNetwork
 
 		public static Tensor[] GetTrainBatches(Tensor[] trainData, int miniBatchSize)
 		{
+			if (miniBatchSize == 1) return trainData;
+			
 			Tensor[] tensorBatches = new Tensor[(int)Math.Ceiling((double)trainData.Length / miniBatchSize)];
 
 			int lastBatchSize = trainData.Length % miniBatchSize;

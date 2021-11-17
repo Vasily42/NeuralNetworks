@@ -53,16 +53,15 @@ namespace NeuralNetwork
 				{
 					firstLayer = (Input)layer;
 				}
-				tempLayer = layer;
+				tempLayer = layer.Leave;
 				helpIndex++;
 				return;
 			}
 
-			layer.Apply(tempLayer);
-			tempLayer = layer;
+			tempLayer = layer.Apply(tempLayer);
 		}
 
-		public void Init(dynamic loss, dynamic optimizer, Regularization regularizer = null)
+		public void Init(dynamic optimizer, dynamic loss = null, Regularization regularizer = null)
 		{
 			if (optimizer is string)
 				this.optimizer = Optimizer.GetOptimizer(optimizer);
@@ -71,12 +70,16 @@ namespace NeuralNetwork
 
 			this.optimizer.@base = this;
 
-			if (loss is string)
-				this.loss = Loss.CreateLoss(loss);
-			else
-				this.loss = loss;
+			if (!(tempLayer is Loss))
+			{
+				if (loss is string)
+					this.loss = Loss.CreateLoss(loss);
+				else
+					this.loss = loss;
 
-			this.loss.Apply(tempLayer);
+				this.loss.Apply(tempLayer);
+			}
+			else loss = tempLayer;
 
 			this.regularizer = regularizer;
 

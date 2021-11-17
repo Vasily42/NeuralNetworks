@@ -26,14 +26,14 @@ namespace NeuralNetwork
 			this.sizeOfPooling = sizeOfPooling;
 			this.strides = strides;
 			if (padding != "valid")
+			{
 				paddingLayer = new Padding2D(padding, sizeOfPooling, strides);
+				Apply(paddingLayer);
+			}
 		}
 
 		public sealed override void Init()
 		{
-			if (paddingLayer != null)
-				base.InsertBefore(paddingLayer);
-
 			InitDelegates();
 
 			int outXLength = (int)((inputShape.xLength - sizeOfPooling.x) / (float)strides.x + 1);

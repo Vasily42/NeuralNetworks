@@ -15,11 +15,9 @@ namespace NeuralNetwork
 
 		protected readonly bool NonTrainable;
 
-		protected readonly string activationName;
-
-		protected CalcLayer(string activationName, string parameterInitialization, bool NonTrainable)
+		protected CalcLayer(string activationFunction, string parameterInitialization, bool NonTrainable)
 		{
-			this.activationName = activationName;
+			InsertActivation(activationFunction);
 			this.NonTrainable = NonTrainable;
 			switch (parameterInitialization.ToLower())
 			{
