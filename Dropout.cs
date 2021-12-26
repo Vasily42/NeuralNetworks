@@ -38,37 +38,37 @@ namespace NeuralNetwork
 		public sealed override void Forward(Tensor input, in int actualMBSize, in bool training)
 		{
 			input.CopyTo(this.input);
+			
 			if (!training)
 			{
-				Parallel.For(0, actualMBSize, (batch) =>
+				for(int batch = 0; batch < actualMBSize; batch++)
 				{
 					for (int flat = 0; flat < inputShape.flatBatchSize; flat++)
-						output[batch, flat] = this.input[batch, flat] * invDropoutRateFloat;
-				});
-				nextLayer.Forward(input, in actualMBSize, in training);
+						this.input[batch, flat] *= invDropoutRateFloat;
+				}
 			}
 			else
 			{
 				for (int i = 0; i < dropped.Length; i++)
 					dropped[i] = rndDropout.Next(1000) < dropoutRate;
 
-				Parallel.For(0, actualMBSize, (batch) =>
+				for (int batch = 0; batch < actualMBSize; batch++)
 				{
 					Drop(this.input, in batch);
-				});
-
-				nextLayer.Forward(this.input, in actualMBSize, in training);
+				}
 			}
+			
+			nextLayer.Forward(this.input, in actualMBSize, in training);
 		}
 
 		public sealed override void BackProp(Tensor deriv, in int actualMBSize)
 		{
 			deriv.CopyTo(outputDerivatives);
 
-			Parallel.For(0, actualMBSize, (batch) =>
+			for(int batch = 0; batch < actualMBSize; batch++)
 			{
 				Drop(outputDerivatives, in batch);
-			});
+			}
 
 			prevLayer.BackProp(outputDerivatives, in actualMBSize);
 		}

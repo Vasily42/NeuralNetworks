@@ -7,13 +7,6 @@ namespace NeuralNetwork
 {
 	public unsafe abstract class ActivationLayer : Layer
 	{
-		protected delegate float Activation(float x);
-
-		protected delegate float Derivative(float y, float x);
-
-		protected Activation activation;
-		protected Derivative derivative;
-
 		public override void Init()
 		{
 			outputShape = inputShape;
@@ -64,7 +57,7 @@ namespace NeuralNetwork
 		{
 			for (int i = 0; i < inputShape.flatBatchSize; i++)
 			{
-				this.output[batch, i] = activation(this.input[batch, i]);
+				this.output[batch, i] = Activation(this.input[batch, i]);
 			}
 		}
 
@@ -72,102 +65,75 @@ namespace NeuralNetwork
 		{
 			for (int i = 0; i < outputShape.flatBatchSize; i++)
 				inputDerivatives[batch, i] = outputDerivatives[batch, i]
-				* derivative(this.output[batch, i], this.input[batch, i]);
+				* Derivative(this.output[batch, i], this.input[batch, i]);
 		}
-
-		public static float Sigmoid(float x)
-		{
-			return (float)(1f / (1 + Math.Exp(-x)));
-		}
-
-		public static float DSigmoid(float y, float x)
-		{
-			return (float)(((1 - y) * y) + 0.02f);
-		}
-
-		public static float ReLU(float x)
-		{
-			return Math.Max(0, x);
-		}
-
-		public static float DReLU(float y, float x)
-		{
-			return (y > 0 ? 1 : 0);
-		}
-
-		public static float Tangens(float x)
-		{
-			return (float)(2f / (1 + Math.Exp(-2 * x)) - 1);
-		}
-
-		public static float DTangens(float y, float x)
-		{
-			return ((float)(1 - y * y) + 0.02f);
-		}
-
-		public static float ELU(float x)
-		{
-			return (x >= 0 ? x : 0.103f * (float)(Math.Exp(x) - 1));
-		}
-
-		public static float DELU(float y, float x)
-		{
-			return (y >= 0 ? 1 : y + 0.103f);
-		}
-
-		public static float Swish(float x)
-		{
-			return (float)(x * Sigmoid(x));
-		}
-
-		public static float DSwish(float y, float x)
-		{
-			return y + Sigmoid(x) * (1 - y);
-		}
+		
+		protected virtual float Activation(float x) => 0;
+		protected virtual float Derivative(float y, float x) => 0;
 	}
 
 	public class Sigmoid : ActivationLayer
 	{
-		public Sigmoid()
+		protected sealed override float Activation(float x)
 		{
-			activation = ActivationLayer.Sigmoid;
-			derivative = ActivationLayer.DSigmoid;
+			return (float)(1f / (1 + Math.Exp(-x)));
+		}
+
+		protected sealed override float Derivative(float y, float x)
+		{
+			return (float)(((1 - y) * y) + 0.02f);
 		}
 	}
 
 	public class Tangens : ActivationLayer
 	{
-		public Tangens()
+		protected sealed override float Activation(float x)
 		{
-			activation += ActivationLayer.Tangens;
-			derivative += ActivationLayer.DTangens;
+			return (float)(2f / (1 + Math.Exp(-2 * x)) - 1);
+		}
+
+		protected sealed override float Derivative(float y, float x)
+		{
+			return ((float)(1 - y * y) + 0.02f);
 		}
 	}
 
 	public class ReLU : ActivationLayer
 	{
-		public ReLU()
+		protected sealed override float Activation(float x)
 		{
-			activation += ActivationLayer.ReLU;
-			derivative += ActivationLayer.DReLU;
+			return Math.Max(0, x);
+		}
+
+		protected sealed override float Derivative(float y, float x)
+		{
+			return (y > 0 ? 1 : 0);
 		}
 	}
 
 	public class ELU : ActivationLayer
 	{
-		public ELU()
+		protected sealed override float Activation(float x)
 		{
-			activation += ActivationLayer.ELU;
-			derivative += ActivationLayer.DELU;
+			return (x >= 0 ? x : 0.103f * (float)(Math.Exp(x) - 1));
+		}
+
+		protected sealed override float Derivative(float y, float x)
+		{
+			return (y >= 0 ? 1 : y + 0.103f);
 		}
 	}
 
 	public class Swish : ActivationLayer
 	{
-		public Swish()
+		protected sealed override float Activation(float x)
 		{
-			activation += ActivationLayer.Swish;
-			derivative += ActivationLayer.DSwish;
+			return (float)(x * (1f / (1 + Math.Exp(-x))));
+		}
+
+		protected sealed override float Derivative(float y, float x)
+		{
+			return (float)(y + (1f / (1 + Math.Exp(-x))) * (1 - y));
 		}
 	}
 

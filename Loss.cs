@@ -11,12 +11,6 @@ namespace NeuralNetwork
 		protected float lossValue;
 		public float LossValue => lossValue;
 
-		protected delegate float LossVal(float sum);
-		protected delegate float Partial(float ideal, float pred);
-
-		protected LossVal lossGen;
-		protected Partial partialDerivative, partialError;
-
 		public Tensor Predicted => input;
 
 		public sealed override void Init()
@@ -59,15 +53,15 @@ namespace NeuralNetwork
 			{
 				for (int i = 0; i < inputShape.flatBatchSize; i++)
 				{
-					this.inputDerivatives[batch, i] = partialDerivative(ideal[batch, i], this.input[batch, i]);
-					lossValue += partialError(ideal[batch, i], this.input[batch, i]);
+					this.inputDerivatives[batch, i] = PartialDerivative(ideal[batch, i], this.input[batch, i]);
+					lossValue += PartialError(ideal[batch, i], this.input[batch, i]);
 				}
 			};
 
 			for (int i = 0; i < actualMBSize; i++)
 				derivationAction(i);
 
-			lossValue = lossGen(lossValue);
+			lossValue = LossGen(lossValue);
 			lossValue /= actualMBSize;
 
 			prevLayer.BackProp(this.inputDerivatives, in actualMBSize);
@@ -86,13 +80,13 @@ namespace NeuralNetwork
 			Action<int> errCalculatingAction = (batch) =>
 			{
 				for (int i = 0; i < inputShape.flatBatchSize; i++)
-					lossValue += partialError(ideal[batch, i], this.input[batch, i]);
+					lossValue += PartialError(ideal[batch, i], this.input[batch, i]);
 			};
 
 			for (int i = 0; i < ideal.shape.batchSize; i++)
 				errCalculatingAction(i);
 
-			lossValue = lossGen(lossValue);
+			lossValue = LossGen(lossValue);
 			return lossValue;
 		}
 
@@ -101,47 +95,30 @@ namespace NeuralNetwork
 			Tensor tensor = Tensor.AddBatchDimension(ideal);
 			return ComputeError(tensor);
 		}
+		
+		protected virtual float PartialError(float ideal, float pred) => 0;
+		protected virtual float PartialDerivative(float ideal, float pred) => 0;
+		protected virtual float LossGen(float loss) => 0;
 	}
 
 	public unsafe class MeanSquaredError : Loss
 	{
-		public MeanSquaredError()
-		{
-			partialError = Square;
-			partialDerivative = SquareDerivative;
-			lossGen = Average;
-		}
-
-		private float Square(float ideal, float pred) => (float)Math.Pow(ideal - pred, 2);
-		private float SquareDerivative(float ideal, float pred) => pred - ideal;
-		private float Average(float sum) => sum / inputShape.flatBatchSize;
+		protected sealed override float PartialError(float ideal, float pred) => (float)Math.Pow(ideal - pred, 2);
+		protected sealed override float PartialDerivative(float ideal, float pred) => pred - ideal;
+		protected sealed override float LossGen(float sum) => sum / inputShape.flatBatchSize;
 	}
 
 	public unsafe class MeanAbsoluteError : Loss
 	{
-		public MeanAbsoluteError()
-		{
-			partialError = Abs;
-			partialDerivative = AbsDerivative;
-			lossGen = Average;
-		}
-
-		private float Abs(float ideal, float pred) => Math.Abs(ideal - pred);
-		private float AbsDerivative(float ideal, float pred) => (ideal - pred > 0 ? -1 : 1);
-		private float Average(float sum) => sum / inputShape.flatBatchSize;
+		protected sealed override float PartialError(float ideal, float pred) => Math.Abs(ideal - pred);
+		protected sealed override float PartialDerivative(float ideal, float pred) => (float)-Math.Sign(ideal - pred);
+		protected sealed override float LossGen(float sum) => sum / inputShape.flatBatchSize;
 	}
 
 	public unsafe class CrossEntropy : Loss
 	{
-		public CrossEntropy()
-		{
-			partialError = CEPartial;
-			partialDerivative = CEDerivative;
-			lossGen = Neg;
-		}
-
-		private float CEPartial(float ideal, float pred) => ideal * (float)Math.Log(pred + epsilon);
-		private float CEDerivative(float ideal, float pred) => -ideal / (pred + epsilon);
-		private float Neg(float sum) => -sum;
+		protected sealed override float PartialError(float ideal, float pred) => ideal * (float)Math.Log(pred + epsilon);
+		protected sealed override float PartialDerivative(float ideal, float pred) => -ideal / (pred + epsilon);
+		protected sealed override float LossGen(float sum) => -sum;
 	}
 }
