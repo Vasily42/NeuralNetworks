@@ -43,7 +43,7 @@ namespace NeuralNetwork
 		public abstract void Update(ref Parameter p);
 	}
 
-	internal unsafe class SGD : Optimizer
+	public unsafe class SGD : Optimizer
 	{
 		private readonly float _momentum;
 		private readonly bool _nesterov;
@@ -69,7 +69,7 @@ namespace NeuralNetwork
 		}
 	}
 
-	internal unsafe class Adam : Optimizer
+	public unsafe class Adam : Optimizer
 	{
 		private const float epsilon = 1.0E-8F;
 		private readonly float momentum, rmsCoeff;
