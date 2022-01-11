@@ -1,113 +1,93 @@
-using System;
-using System.IO;
-using System.Linq;
-using System.Collections.Generic;
+namespace NeuralNetwork;
 
-namespace NeuralNetwork
+public abstract class Optimizer
 {
-	public abstract class Optimizer
-	{
-		public Model @base;
+    public Model @base;
 
-		internal float learningRate;
+    internal float learningRate;
 
-		public Optimizer(float learningRate)
-		{
-			this.learningRate = learningRate;
-		}
+    public Optimizer(float learningRate)
+    {
+        this.learningRate = learningRate;
+    }
 
-		public static Optimizer GetOptimizer(string optimizer)
-		{
-			switch (optimizer.ToLower())
-			{
-				case "none":
-					return new SGD();
+    public static Optimizer GetOptimizer(string optimizer) => optimizer.ToLower() switch
+    {
+        "none" => new SGD(),
+        "momentum" => new SGD(momentum: 0.9f),
+        "nesterov" => new SGD(momentum: 0.9f, nesterov: true),
+        "adam" => new Adam(),
+        "nadam" => new Adam(nesterov: true),
+        _ => throw new Exception(),
+    };
 
-				case "momentum":
-					return new SGD(momentum: 0.9f);
+    public abstract void Update(ref Parameter p);
+}
 
-				case "nesterov":
-					return new SGD(momentum: 0.9f, nesterov: true);
+public unsafe class SGD : Optimizer
+{
+    private readonly float _momentum;
+    private readonly bool _nesterov;
 
-				case "adam":
-					return new Adam();
+    public SGD(float learningRate = 0.001f, float momentum = 0, bool nesterov = false) :
+    base(learningRate)
+    {
+        this._momentum = momentum;
+        if (momentum > 0)
+            this._nesterov = nesterov;
+        else this._nesterov = false;
+    }
 
-				case "nadam":
-					return new Adam(nesterov: true);
+    public override void Update(ref Parameter p)
+    {
+        p.firstMomentum = _momentum * p.firstMomentum + learningRate * p.gradient;
+        if (_nesterov)
+            p.value -= _momentum * p.firstMomentum + learningRate * p.gradient;
+        else
+            p.value -= p.firstMomentum;
 
-				default:
-					throw new Exception();
-			}
-		}
+        p.gradient = 0;
+    }
+}
 
-		public abstract void Update(ref Parameter p);
-	}
+public unsafe class Adam : Optimizer
+{
+    private const float epsilon = 1.0E-8F;
+    private readonly float momentum, rmsCoeff;
+    private readonly bool nesterov;
 
-	public unsafe class SGD : Optimizer
-	{
-		private readonly float _momentum;
-		private readonly bool _nesterov;
+    public Adam(float learningRate = 0.001f, float momentum = 0.9f, float rmsCoeff = 0.999f, bool nesterov = false) :
+    base(learningRate)
+    {
+        this.momentum = momentum;
+        this.rmsCoeff = rmsCoeff;
+        this.nesterov = nesterov;
+    }
 
-		public SGD(float learningRate = 0.001f, float momentum = 0, bool nesterov = false) :
-		base(learningRate)
-		{
-			this._momentum = momentum;
-			if (momentum > 0)
-				this._nesterov = nesterov;
-			else this._nesterov = false;
-		}
+    public sealed override void Update(ref Parameter p)
+    {
+        float firstUnbias, secondUnbias;
 
-		public override void Update(ref Parameter p)
-		{
-			p.firstMomentum = _momentum * p.firstMomentum + learningRate * p.gradient;
-			if (_nesterov)
-				p.value -= _momentum * p.firstMomentum + learningRate * p.gradient;
-			else
-				p.value -= p.firstMomentum;
+        p.firstMomentum =
+        momentum * p.firstMomentum +
+        (1 - momentum) * p.gradient;
 
-			p.gradient = 0;
-		}
-	}
+        p.secondMomentum =
+        rmsCoeff * p.secondMomentum +
+        (1 - rmsCoeff) * p.gradient * p.gradient;
 
-	public unsafe class Adam : Optimizer
-	{
-		private const float epsilon = 1.0E-8F;
-		private readonly float momentum, rmsCoeff;
-		private readonly bool nesterov;
+        firstUnbias = (float)(p.firstMomentum
+        / (1 - Math.Pow(momentum, @base.iteration + 1)));
 
-		public Adam(float learningRate = 0.001f, float momentum = 0.9f, float rmsCoeff = 0.999f, bool nesterov = false) :
-		base(learningRate)
-		{
-			this.momentum = momentum;
-			this.rmsCoeff = rmsCoeff;
-			this.nesterov = nesterov;
-		}
+        secondUnbias = (float)(p.secondMomentum
+        / (1 - Math.Pow(rmsCoeff, @base.iteration + 1)));
 
-		public override void Update(ref Parameter p)
-		{
-			float firstUnbias, secondUnbias;
+        if (nesterov)
+            p.value -= (float)(learningRate / Math.Sqrt(secondUnbias + epsilon)) * (float)
+            (momentum * firstUnbias + ((1 - momentum) * p.gradient) / (1 - Math.Pow(momentum, @base.iteration + 1)));
+        else
+            p.value -= (float)(this.learningRate * firstUnbias / Math.Sqrt(secondUnbias + epsilon));
 
-			p.firstMomentum =
-			momentum * p.firstMomentum +
-			(1 - momentum) * p.gradient;
-
-			p.secondMomentum =
-			rmsCoeff * p.secondMomentum +
-			(1 - rmsCoeff) * p.gradient * p.gradient;
-
-			firstUnbias = (float)(p.firstMomentum
-			/ (1 - Math.Pow(momentum, @base.iteration + 1)));
-
-			secondUnbias = (float)(p.secondMomentum
-			/ (1 - Math.Pow(rmsCoeff, @base.iteration + 1)));
-
-			if (nesterov)
-				p.value -= (float)(learningRate / Math.Sqrt(secondUnbias + epsilon)) * (float)
-				(momentum * firstUnbias + ((1 - momentum) * p.gradient) / (1 - Math.Pow(momentum, @base.iteration + 1)));
-			else
-				p.value -= (float)(this.learningRate * firstUnbias / Math.Sqrt(secondUnbias + epsilon));
-
-			p.gradient = 0;
-		}
-	}
+        p.gradient = 0;
+    }
 }
