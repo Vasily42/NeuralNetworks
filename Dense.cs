@@ -1,46 +1,47 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace NeuralNetwork;
 
 public unsafe class Dense : CalcLayer
 {
-    private Parameter[] bias;
-    private Parameter[][] weights;
+    private Tensor kernel, kernelGradient, bias, biasGradient;
+
+    Optimizer kernelOpt, biasOpt;
+
+    Regularization? kernelReg, biasReg;
 
     private readonly int numOfNeurons;
 
-    public Dense(int numOfNeurons, string activationFunction = "linear", string parameterInitialization = "kaiming", bool NonTrainable = false) :
+    public Dense(int numOfNeurons, string activationFunction = "linear", string parameterInitialization = "kaiming", Regularization? kernelReg = null,
+    Regularization? biasReg = null, bool NonTrainable = false) :
     base(activationFunction, parameterInitialization, NonTrainable)
     {
         this.numOfNeurons = numOfNeurons;
+        this.kernelReg = kernelReg;
+        this.biasReg = biasReg;
     }
 
-    public sealed override void Init()
+    public sealed override void Init(Optimizer optimizer)
     {
-        outputShape = inputShape.Change(xLength: numOfNeurons);
+        outputShape = inputShape.NeuralChange(xLength: numOfNeurons);
 
         base.fanIn = inputShape.xLength;
         base.fanOut = outputShape.xLength;
 
         input = Tensor.Create(inputShape);
-
         inputDerivatives = Tensor.Create(inputShape);
-
         output = Tensor.Create(outputShape);
-
         outputDerivatives = Tensor.Create(outputShape);
 
-        bias = new Parameter[outputShape.xLength];
+        bias = new Tensor1(outputShape.xLength).Fill(0);
+        biasGradient = new Tensor1(outputShape.xLength).Fill(0);
+        biasOpt = optimizer.GetCopy();
+        biasOpt.Init(bias.shape.flatSize);
 
-        weights = new Parameter[inputShape.xLength][];
-
-        for (int NThis = 0; NThis < inputShape.xLength; NThis++)
-        {
-            weights[NThis] = new Parameter[outputShape.xLength];
-            for (int NNext = 0; NNext < outputShape.xLength; NNext++)
-                weights[NThis][NNext] = new Parameter(randomInitNum());
-        }
-
-        for (int NNext = 0; NNext < outputShape.xLength; NNext++)
-            bias[NNext] = new Parameter(0);
+        kernel = new Tensor2(inputShape.xLength, outputShape.xLength).Fill(randomInitNum);
+        kernelGradient = new Tensor2(inputShape.xLength, outputShape.xLength).Fill(0);
+        kernelOpt = optimizer.GetCopy();
+        kernelOpt.Init(kernel.shape.flatSize);
     }
 
     protected sealed override void ForwardAction(int batch)
@@ -53,10 +54,10 @@ public unsafe class Dense : CalcLayer
 
             for (int NNext = 0; NNext < inputShape.xLength; NNext++)
             {
-                sum += this.input[batch, NNext] * weights[NNext][NThis].value;
+                sum += this.input[batch, NNext] * kernel[NNext, NThis];
             }
 
-            sum += bias[NThis].value;
+            sum += bias[NThis];
             this.output[batch, NThis] = sum;
         }
     }
@@ -65,7 +66,7 @@ public unsafe class Dense : CalcLayer
     {
         for (int NThis = 0; NThis < outputShape.xLength; NThis++)
         {
-            bias[NThis].gradient += outputDerivatives[batch, NThis];
+            biasGradient[NThis] += outputDerivatives[batch, NThis];
         }
 
         for (int NNext = 0; NNext < inputShape.xLength; NNext++)
@@ -73,28 +74,21 @@ public unsafe class Dense : CalcLayer
             inputDerivatives[batch, NNext] = 0;
             for (int NThis = 0; NThis < outputShape.xLength; NThis++)
             {
-                weights[NNext][NThis].gradient += this.input[batch, NNext] * outputDerivatives[batch, NThis];
-                inputDerivatives[batch, NNext] += weights[NNext][NThis].value * outputDerivatives[batch, NThis];
+                kernelGradient[NNext, NThis] += this.input[batch, NNext] * outputDerivatives[batch, NThis];
+                inputDerivatives[batch, NNext] += kernel[NNext, NThis] * outputDerivatives[batch, NThis];
             }
         }
     }
 
-    public sealed override void Correction(Optimizer optimizer, Regularization regularizer)
+    public sealed override void Correction()
     {
         if (NonTrainable) return;
-        for (int NThis = 0; NThis < outputShape.xLength; NThis++)
-        {
-            regularizer?.GradPenalty(ref bias[NThis]);
-            optimizer.Update(ref bias[NThis]);
-        }
+        
+        biasReg?.GradPenalty(bias, biasGradient);
+        biasOpt.Update(bias, biasGradient);
 
-        for (int NNext = 0; NNext < inputShape.xLength; NNext++)
-        {
-            for (int NThis = 0; NThis < outputShape.xLength; NThis++)
-            {
-                regularizer?.GradPenalty(ref weights[NNext][NThis]);
-                optimizer.Update(ref weights[NNext][NThis]);
-            }
-        }
+        kernelReg?.GradPenalty(kernel, kernelGradient);
+        kernelOpt.Update(kernel, kernelGradient);
+        
     }
 }

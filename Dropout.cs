@@ -18,7 +18,7 @@ public unsafe class Dropout : Layer
         rndDropout = new Random();
     }
 
-    public sealed override void Init()
+    public sealed override void Init(Optimizer optimizer)
     {
         outputShape = inputShape;
 

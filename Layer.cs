@@ -25,27 +25,27 @@ public abstract class Layer
         return Leave;
     }
 
-    public virtual void Init() { }
+    public virtual void Init(Optimizer optimizer) { }
 
-    public void InitGraph()
+    public void InitGraph(Optimizer optimizer)
     {
         if (prevLayer != null)
         {
             this.inputShape = prevLayer.outputShape;
         }
 
-        Init();
+        Init(optimizer);
         //Console.WriteLine(nextLayer);
-        nextLayer?.InitGraph();
+        nextLayer?.InitGraph(optimizer);
     }
 
-    public void ParameterCorrection(Optimizer optimizer, Regularization regularizer)
+    public void ParameterCorrection()
     {
         if (this is CalcLayer calc)
         {
-            calc.Correction(optimizer, regularizer);
+            calc.Correction();
         }
-        nextLayer?.ParameterCorrection(optimizer, regularizer);
+        nextLayer?.ParameterCorrection();
     }
 
     protected void InsertAhead(Layer layer) => layer.Apply(this);

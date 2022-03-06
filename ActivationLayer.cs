@@ -2,7 +2,7 @@ namespace NeuralNetwork;
 
 public abstract unsafe class ActivationLayer : Layer
 {
-    public override void Init()
+    public sealed override void Init(Optimizer optimizer)
     {
         outputShape = inputShape;
 

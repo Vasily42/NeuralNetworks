@@ -7,7 +7,7 @@ public unsafe abstract class Loss : Layer
 
     public Tensor Predicted => input;
 
-    public override void Init()
+    public override void Init(Optimizer optimizer)
     {
         input = Tensor.Create(inputShape);
         inputDerivatives = Tensor.Create(inputShape);

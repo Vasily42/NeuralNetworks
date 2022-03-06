@@ -2,8 +2,11 @@ namespace NeuralNetwork;
 
 public unsafe class Convolution2D : CalcLayer
 {
-    private Parameter[,,,] filters;
-    private Parameter[] bias;
+    private Tensor kernel, kernelGradient, bias, biasGradient;
+
+    Optimizer kernelOpt, biasOpt;
+
+    Regularization? kernelReg, biasReg;
 
     private readonly int numberOfFilters;
     internal readonly (byte x, byte y) strides, kernelSize;
@@ -15,6 +18,8 @@ public unsafe class Convolution2D : CalcLayer
     string activationFunction = "linear",
     string padding = "same",
     string parameterInitialization = "kaiming",
+    Regularization? kernelReg = null,
+    Regularization? biasReg = null,
     bool NonTrainable = false) : base(activationFunction, parameterInitialization, NonTrainable)
     {
         this.numberOfFilters = numberOfFilters;
@@ -25,14 +30,16 @@ public unsafe class Convolution2D : CalcLayer
             paddingLayer = new Padding2D(padding, kernelSize, strides);
             Apply(paddingLayer);
         }
+        this.kernelReg = kernelReg;
+        this.biasReg = biasReg;
     }
 
-    public sealed override void Init()
+    public sealed override void Init(Optimizer optimizer)
     {
         int outXLength = (int)((inputShape.xLength - kernelSize.x) / (float)strides.x + 1);
         int outYLength = (int)((inputShape.yLength - kernelSize.y) / (float)strides.y + 1);
 
-        outputShape = inputShape.Change(
+        outputShape = inputShape.NeuralChange(
         channels: numberOfFilters, xLength: outXLength, yLength: outYLength);
 
         fanIn = (int)(kernelSize.x * kernelSize.y) * inputShape.channels;
@@ -42,21 +49,17 @@ public unsafe class Convolution2D : CalcLayer
         input = Tensor.Create(inputShape);
         output = Tensor.Create(outputShape);
         outputDerivatives = Tensor.Create(outputShape);
-        filters = new Parameter[numberOfFilters, inputShape.channels, kernelSize.y, kernelSize.x];
-        bias = new Parameter[outputShape.channels];
 
-        for (int filter = 0; filter < numberOfFilters; filter++)
-            for (int inputChannel = 0; inputChannel < inputShape.channels; inputChannel++)
-                for (int y = 0; y < kernelSize.y; y++)
-                    for (int x = 0; x < kernelSize.x; x++)
-                    {
-                        filters[filter, inputChannel, y, x] = new Parameter(randomInitNum());
-                    }
+        bias = new Tensor1(outputShape.channels).Fill(0);
+        biasGradient = new Tensor1(outputShape.channels).Fill(0);
+        biasOpt = optimizer.GetCopy();
+        biasOpt.Init(bias.shape.flatSize);
 
-        for (int filter = 0; filter < outputShape.channels; filter++)
-        {
-            bias[filter] = new Parameter(0);
-        }
+        kernel = new Tensor4(numberOfFilters, inputShape.channels, kernelSize.y, kernelSize.x).Fill(randomInitNum);
+        kernelGradient = new Tensor4(numberOfFilters, inputShape.channels, kernelSize.y, kernelSize.x).Fill(0);
+        kernelOpt = optimizer.GetCopy();
+        kernelOpt.Init(kernel.shape.flatSize);
+
     }
 
     protected sealed override void ForwardAction(int batch)
@@ -66,7 +69,7 @@ public unsafe class Convolution2D : CalcLayer
             for (int iOut = 0; iOut < outputShape.yLength; iOut++)
                 for (int jOut = 0; jOut < outputShape.xLength; jOut++)
                 {
-                    this.output[batch, filter, iOut, jOut] = bias[filter].value;
+                    this.output[batch, filter, iOut, jOut] = bias[filter];
                 }
 
         for (int filter = 0; filter < numberOfFilters; filter++)
@@ -78,7 +81,7 @@ public unsafe class Convolution2D : CalcLayer
                         for (int y = 0; y < kernelSize.y; y++)
                             for (int x = 0; x < kernelSize.x; x++)
                             {
-                                sum += filters[filter, inputChannel, y, x].value *
+                                sum += kernel[filter, inputChannel, y, x] *
                                 this.input[batch, inputChannel, i + y, j + x];
                             }
                         this.output[batch, filter, iOut, jOut] += sum;
@@ -98,8 +101,8 @@ public unsafe class Convolution2D : CalcLayer
                         for (int y = 0; y < kernelSize.y; y++)
                             for (int x = 0; x < kernelSize.x; x++)
                             {
-                                filters[filter, inputChannel, y, x].gradient += outputDerivatives[batch, filter, iOut, jOut] * this.input[batch, inputChannel, i + y, j + x];
-                                inputDerivatives[batch, inputChannel, i + y, j + x] += outputDerivatives[batch, filter, iOut, jOut] * filters[filter, inputChannel, y, x].value;
+                                kernelGradient[filter, inputChannel, y, x] += outputDerivatives[batch, filter, iOut, jOut] * this.input[batch, inputChannel, i + y, j + x];
+                                inputDerivatives[batch, inputChannel, i + y, j + x] += outputDerivatives[batch, filter, iOut, jOut] * kernel[filter, inputChannel, y, x];
                             }
                     }
             }
@@ -108,27 +111,18 @@ public unsafe class Convolution2D : CalcLayer
             for (int iOut = 0; iOut < outputShape.yLength; iOut++)
                 for (int jOut = 0; jOut < outputShape.xLength; jOut++)
                 {
-                    bias[filter].gradient += outputDerivatives[batch, filter, iOut, jOut];
+                    biasGradient[filter] += outputDerivatives[batch, filter, iOut, jOut];
                 }
     }
 
-    public sealed override void Correction(Optimizer optimizer, Regularization regularizer)
+    public sealed override void Correction()
     {
         if (NonTrainable) return;
 
-        for (int filter = 0; filter < numberOfFilters; filter++)
-        {
-            for (int inputChannel = 0; inputChannel < inputShape.channels; inputChannel++)
-            {
-                for (int y = 0; y < kernelSize.y; y++)
-                    for (int x = 0; x < kernelSize.x; x++)
-                    {
-                        regularizer?.GradPenalty(ref filters[filter, inputChannel, y, x]);
-                        optimizer.Update(ref filters[filter, inputChannel, y, x]);
-                    }
-            }
-            regularizer?.GradPenalty(ref bias[filter]);
-            optimizer.Update(ref bias[filter]);
-        }
+        biasReg?.GradPenalty(bias, biasGradient);
+        biasOpt.Update(bias, biasGradient);
+
+        kernelReg?.GradPenalty(kernel, kernelGradient);
+        kernelOpt.Update(kernel, kernelGradient);
     }
 }

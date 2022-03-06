@@ -12,18 +12,4 @@ internal static class StGeneral
     }
 }
 
-public struct Parameter
-{
-    public Parameter(float parameterInitValue)
-    {
-        value = parameterInitValue;
-        gradient = 0;
-        firstMomentum = 0;
-        secondMomentum = 0;
-    }
 
-    public float value;
-    public float gradient;
-    public float firstMomentum;
-    public float secondMomentum;
-}

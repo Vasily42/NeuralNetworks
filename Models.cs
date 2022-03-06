@@ -4,15 +4,6 @@ public abstract class Model
 {
     public bool Initialized { get; protected set; }
 
-    internal Optimizer optimizer;
-    public float LearningRate
-    {
-        get => optimizer.learningRate;
-        set => optimizer.learningRate = value;
-    }
-
-    internal Regularization regularizer;
-
     internal long iteration;
     public long Iteration => iteration;
 
@@ -28,8 +19,7 @@ public abstract class Model
 
 public sealed class Sequential : Model
 {
-    public delegate void Render(float value);
-    public event Render ErrorRendering, IterationRendering, EpochRendering;
+    public event Action<float> ErrorRendering, IterationRendering, EpochRendering;
 
     public Tensor Answer => loss.Predicted;
     public float ComputeError(Array ideal)
@@ -60,14 +50,13 @@ public sealed class Sequential : Model
         tempLayer = layer.Apply(tempLayer);
     }
 
-    public void Init(dynamic optimizer, dynamic loss = null, Regularization regularizer = null)
+    public void Init(dynamic optimizer, dynamic loss = null)
     {
+        Optimizer optimizer0;
         if (optimizer is string)
-            this.optimizer = Optimizer.GetOptimizer(optimizer);
+            optimizer0 = Optimizer.GetOptimizer(optimizer);
         else
-            this.optimizer = optimizer;
-
-        this.optimizer.@base = this;
+            optimizer0 = optimizer;
 
         if (tempLayer is not Loss)
         {
@@ -80,9 +69,7 @@ public sealed class Sequential : Model
         }
         else this.loss = (Loss)tempLayer;
 
-        this.regularizer = regularizer;
-
-        firstLayer.InitGraph();
+        firstLayer.InitGraph(optimizer0);
 
         Training = true;
         Initialized = true;
@@ -106,7 +93,7 @@ public sealed class Sequential : Model
 
         ErrorRendering?.Invoke(loss.LossValue);
 
-        firstLayer.ParameterCorrection(optimizer, regularizer);
+        firstLayer.ParameterCorrection();
 
         iteration++;
     }

@@ -2,8 +2,6 @@ namespace NeuralNetwork;
 
 public abstract class Optimizer
 {
-    public Model @base;
-
     internal float learningRate;
 
     public Optimizer(float learningRate)
@@ -21,13 +19,18 @@ public abstract class Optimizer
         _ => throw new Exception(),
     };
 
-    public abstract void Update(ref Parameter p);
+    public abstract void Init(int flatSize);
+
+    public abstract void Update(Tensor weights, Tensor gradient);
+
+    public abstract Optimizer GetCopy();
 }
 
 public unsafe class SGD : Optimizer
 {
     private readonly float _momentum;
     private readonly bool _nesterov;
+    private Tensor momentum;
 
     public SGD(float learningRate = 0.001f, float momentum = 0, bool nesterov = false) :
     base(learningRate)
@@ -38,56 +41,93 @@ public unsafe class SGD : Optimizer
         else this._nesterov = false;
     }
 
-    public override void Update(ref Parameter p)
+    public sealed override void Init(int flatSize)
     {
-        p.firstMomentum = _momentum * p.firstMomentum + learningRate * p.gradient;
-        if (_nesterov)
-            p.value -= _momentum * p.firstMomentum + learningRate * p.gradient;
-        else
-            p.value -= p.firstMomentum;
+        this.momentum = new Tensor1(flatSize).Fill(0);
+    }
 
-        p.gradient = 0;
+    public sealed override void Update(Tensor weights, Tensor gradient)
+    {
+        for (int i = 0; i < weights.shape.flatSize; i++)
+        {
+            momentum[i] = _momentum * momentum[i] + learningRate * gradient[i];
+        }
+
+        if (_nesterov)
+            for (int i = 0; i < weights.shape.flatSize; i++)
+            {
+                weights[i] -= _momentum * momentum[i] + learningRate * gradient[i];
+                gradient[i] = 0;
+            }
+        else
+            for (int i = 0; i < weights.shape.flatSize; i++)
+            {
+                weights[i] -= momentum[i];
+                gradient[i] = 0;
+            }
+    }
+
+    public sealed override Optimizer GetCopy()
+    {
+        return new SGD(learningRate, _momentum, _nesterov);
     }
 }
 
 public unsafe class Adam : Optimizer
 {
     private const float epsilon = 1.0E-8F;
-    private readonly float momentum, rmsCoeff;
-    private readonly bool nesterov;
+
+    private long iteration;
+    private readonly float _momentum, _rmsCoeff;
+    private readonly bool _nesterov;
+
+    private Tensor firstMomentum, secondMomentum;
 
     public Adam(float learningRate = 0.001f, float momentum = 0.9f, float rmsCoeff = 0.999f, bool nesterov = false) :
     base(learningRate)
     {
-        this.momentum = momentum;
-        this.rmsCoeff = rmsCoeff;
-        this.nesterov = nesterov;
+        this._momentum = momentum;
+        this._rmsCoeff = rmsCoeff;
+        this._nesterov = nesterov;
+        iteration = 1;
+       }
+
+    public sealed override void Init(int flatSize)
+    {
+        firstMomentum = new Tensor1(flatSize).Fill(0);
+        secondMomentum = new Tensor1(flatSize).Fill(0);
     }
 
-    public sealed override void Update(ref Parameter p)
+    public sealed override void Update(Tensor weights, Tensor gradient)
     {
         float firstUnbias, secondUnbias;
 
-        p.firstMomentum =
-        momentum * p.firstMomentum +
-        (1 - momentum) * p.gradient;
+        if (_nesterov)
+        for (int i = 0; i < weights.shape.flatSize; i++)
+        {
+            firstMomentum[i] = _momentum * firstMomentum[i] + (1 - _momentum) * gradient[i];
+            secondMomentum[i] = _rmsCoeff * secondMomentum[i] + (1 - _rmsCoeff) * gradient[i] * gradient[i];
+            firstUnbias = firstMomentum[i] / (1 - MathF.Pow(_momentum, iteration));
+            secondUnbias = secondMomentum[i] / (1 - MathF.Pow(_rmsCoeff, iteration));
+            weights[i] -= learningRate / MathF.Sqrt(secondUnbias + epsilon) * 
+            (_momentum * firstUnbias + (1 - _momentum) * gradient[i] / (1 - MathF.Pow(_momentum, iteration)));
+            gradient[i] = 0;
+        }
+        else for (int i = 0; i < weights.shape.flatSize; i++)
+        {
+            firstMomentum[i] = _momentum * firstMomentum[i] + (1 - _momentum) * gradient[i];
+            secondMomentum[i] = _rmsCoeff * secondMomentum[i] + (1 - _rmsCoeff) * gradient[i] * gradient[i];
+            firstUnbias = firstMomentum[i] / (1 - MathF.Pow(_momentum, iteration));
+            secondUnbias = secondMomentum[i] / (1 - MathF.Pow(_rmsCoeff, iteration));
+            weights[i] -= learningRate * firstUnbias / MathF.Sqrt(secondUnbias + epsilon);
+            gradient[i] = 0;
+        }
 
-        p.secondMomentum =
-        rmsCoeff * p.secondMomentum +
-        (1 - rmsCoeff) * p.gradient * p.gradient;
+        iteration++;
+    }
 
-        firstUnbias = (float)(p.firstMomentum
-        / (1 - Math.Pow(momentum, @base.iteration + 1)));
-
-        secondUnbias = (float)(p.secondMomentum
-        / (1 - Math.Pow(rmsCoeff, @base.iteration + 1)));
-
-        if (nesterov)
-            p.value -= (float)(learningRate / Math.Sqrt(secondUnbias + epsilon)) * (float)
-            (momentum * firstUnbias + ((1 - momentum) * p.gradient) / (1 - Math.Pow(momentum, @base.iteration + 1)));
-        else
-            p.value -= (float)(this.learningRate * firstUnbias / Math.Sqrt(secondUnbias + epsilon));
-
-        p.gradient = 0;
+    public sealed override Optimizer GetCopy()
+    {
+        return new Adam(learningRate, _momentum, _rmsCoeff, _nesterov);
     }
 }

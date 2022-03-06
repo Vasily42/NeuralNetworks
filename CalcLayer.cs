@@ -2,9 +2,7 @@ namespace NeuralNetwork;
 
 public unsafe abstract class CalcLayer : Layer
 {
-    protected delegate float RandomWeightInit();
-
-    protected RandomWeightInit randomInitNum;
+    protected Func<float> randomInitNum;
 
     protected int fanIn, fanOut;
 
@@ -26,7 +24,7 @@ public unsafe abstract class CalcLayer : Layer
         }
     }
 
-    public abstract void Correction(Optimizer optimizer, Regularization regularizer);
+    public abstract void Correction();
 
     private float Xavier() => MathF.Sqrt(6f / (fanIn + fanOut)) * (2 * StGeneral.NextFloat() - 1);
 

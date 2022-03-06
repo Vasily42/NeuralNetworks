@@ -16,7 +16,7 @@ public unsafe class Padding2D : Layer
         this.strides = strides;
     }
 
-    public sealed override void Init()
+    public sealed override void Init(Optimizer optimizer)
     {
         switch (method.ToLower())
         {
@@ -35,7 +35,7 @@ public unsafe class Padding2D : Layer
                 break;
         }
 
-        outputShape = inputShape.Change(xLength:
+        outputShape = inputShape.NeuralChange(xLength:
         inputShape.xLength + paddingShiftStart.x + paddingShiftEnd.x,
         yLength: inputShape.yLength + paddingShiftStart.y + paddingShiftEnd.y);
 

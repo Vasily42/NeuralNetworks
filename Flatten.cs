@@ -2,7 +2,7 @@ namespace NeuralNetwork;
 
 public unsafe class Flatten : Layer
 {
-    public sealed override void Init()
+    public sealed override void Init(Optimizer optimizer)
     {
         outputShape = new Tensor.ShapeInfo(inputShape.batchSize, inputShape.flatBatchSize);
         output = Tensor.Create(outputShape);

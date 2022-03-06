@@ -27,14 +27,14 @@ public unsafe class Pooling2D : Layer
         }
     }
 
-    public sealed override void Init()
+    public sealed override void Init(Optimizer optimizer)
     {
         InitDelegates();
 
         int outXLength = (int)((inputShape.xLength - sizeOfPooling.x) / (float)strides.x + 1);
         int outYLength = (int)((inputShape.yLength - sizeOfPooling.y) / (float)strides.y + 1);
 
-        outputShape = inputShape.Change(xLength: outXLength, yLength: outYLength);
+        outputShape = inputShape.NeuralChange(xLength: outXLength, yLength: outYLength);
 
         input = Tensor.Create(inputShape);
 
