@@ -112,11 +112,19 @@ public unsafe abstract class Tensor
         source.CopyTo(destination, batches);
     }
 
-    public static Tensor CutBatch(Tensor tensor)
+    public Tensor CutAxis1()
     {
-        Tensor newTensor = Create(tensor.shape.NeuralChange(batchSize: 1));
+        Tensor newTensor = this.shape.rank switch
+        {
+            1 => new Tensor1(this.shape.n1),
+            2 => new Tensor1(this.shape.n2),
+            3 => new Tensor2(this.shape.n2, this.shape.n3),
+            4 => new Tensor3(this.shape.n2, this.shape.n3, this.shape.n4),
+            5 => new Tensor4(this.shape.n2, this.shape.n3, this.shape.n4, this.shape.n5),
+            6 => new Tensor5(this.shape.n2, this.shape.n3, this.shape.n4, this.shape.n5, this.shape.n6)
+        };
 
-        tensor.CopyTo(newTensor, 1);
+        this.CopyTo(newTensor, 1);
 
         return newTensor;
     }

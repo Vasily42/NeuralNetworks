@@ -8,12 +8,12 @@ public unsafe class Dense : CalcLayer
 
     Optimizer kernelOpt, biasOpt;
 
-    Regularization? kernelReg, biasReg;
+    Regularization kernelReg, biasReg;
 
     private readonly int numOfNeurons;
 
-    public Dense(int numOfNeurons, string activationFunction = "linear", string parameterInitialization = "kaiming", Regularization? kernelReg = null,
-    Regularization? biasReg = null, bool NonTrainable = false) :
+    public Dense(int numOfNeurons, string activationFunction = "linear", string parameterInitialization = "kaiming", Regularization kernelReg = null,
+    Regularization biasReg = null, bool NonTrainable = false) :
     base(activationFunction, parameterInitialization, NonTrainable)
     {
         this.numOfNeurons = numOfNeurons;

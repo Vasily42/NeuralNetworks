@@ -6,7 +6,7 @@ public unsafe class Convolution2D : CalcLayer
 
     Optimizer kernelOpt, biasOpt;
 
-    Regularization? kernelReg, biasReg;
+    Regularization kernelReg, biasReg;
 
     private readonly int numberOfFilters;
     internal readonly (byte x, byte y) strides, kernelSize;
@@ -18,8 +18,8 @@ public unsafe class Convolution2D : CalcLayer
     string activationFunction = "linear",
     string padding = "same",
     string parameterInitialization = "kaiming",
-    Regularization? kernelReg = null,
-    Regularization? biasReg = null,
+    Regularization kernelReg = null,
+    Regularization biasReg = null,
     bool NonTrainable = false) : base(activationFunction, parameterInitialization, NonTrainable)
     {
         this.numberOfFilters = numberOfFilters;

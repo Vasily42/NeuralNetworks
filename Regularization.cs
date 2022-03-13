@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace NeuralNetwork;
 
 public class Regularization
@@ -18,4 +20,6 @@ public class Regularization
             gradient[i] += Math.Sign(weights[i]) * l1;
         }
     }
+
+    public static implicit operator Regularization((float l1, float l2) tupl) => new Regularization(tupl.l1, tupl.l2);
 }
