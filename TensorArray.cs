@@ -1,127 +1,76 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 
 namespace NeuralNetwork;
 
-public unsafe abstract class Tensor
+public unsafe class Tensor
 {
-    public readonly ShapeInfo shape;
-    protected GCHandle pin;
-    protected float* ptr;
+    public ShapeInfo shape;
+    private GCHandle pin;
+    private readonly float* ptr;
 
-    protected Tensor(int n1, int n2 = 0, int n3 = 0, int n4 = 0, int n5 = 0, int n6 = 0) => shape = new ShapeInfo(n1, n2, n3, n4, n5, n6);
+    readonly float[] array;
 
-    protected Tensor(ShapeInfo info) => shape = info;
+    public Tensor(int n1, int n2 = 0, int n3 = 0, int n4 = 0, int n5 = 0, int n6 = 0)
+    {
+        shape = new ShapeInfo(n1, n2, n3, n4, n5, n6);
+
+        array = new float[shape.flatSize];
+
+        pin = GCHandle.Alloc(array, GCHandleType.Pinned);
+
+        ptr = (float*)pin.AddrOfPinnedObject();
+    }
+
+    public Tensor(ShapeInfo shape)
+    {
+        this.shape = shape;
+
+        array = new float[shape.flatSize];
+
+        pin = GCHandle.Alloc(array, GCHandleType.Pinned);
+
+        ptr = (float*)pin.AddrOfPinnedObject();
+    }
 
     ~Tensor()
     {
         pin.Free();
     }
 
-    protected void PinAndRef(object array)
-    {
-        pin = GCHandle.Alloc(array, GCHandleType.Pinned);
-
-        ptr = (float*)pin.AddrOfPinnedObject();
-    }
-
-    public static Tensor CreateWithRef(Array array) => array.Rank switch
-    {
-        1 => new Tensor1((float[]) array),
-        2 => new Tensor2((float[,])array),
-        3 => new Tensor3((float[,,])array),
-        4 => new Tensor4((float[,,,])array),
-        5 => new Tensor5((float[,,,,])array),
-        6 => new Tensor6((float[,,,,,])array),
-        _ => throw new Exception(),
-    };
-
-    public static Tensor Create(ShapeInfo shape) => shape.rank switch
-    {
-        1 => new Tensor1(shape.n1),
-        2 => new Tensor2(shape.n1, shape.n2),
-        3 => new Tensor3(shape.n1, shape.n2, shape.n3),
-        4 => new Tensor4(shape.n1, shape.n2, shape.n3, shape.n4),
-        5 => new Tensor5(shape.n1, shape.n2, shape.n3, shape.n4, shape.n5),
-        6 => new Tensor6(shape.n1, shape.n2, shape.n3, shape.n4, shape.n5, shape.n6)
-    };
-
     public static Tensor Create(dynamic array)
     {
         ShapeInfo info = ShapeInfo.GetInfo(array);
-        Tensor tensor = Tensor.Create(info);
+        Tensor tensor = new Tensor(info);
         tensor.Assimilate(array);
         return tensor;
     }
 
-    public void Assimilate(float[] array)
+    public void Assimilate(Array array)
     {
-        fixed (float* p = array)
-            for (int i = 0; i < shape.flatSize; i++)
-                this[i] = p[i];
-    }
-
-    public void Assimilate(float[,] array)
-    {
-        fixed (float* p = array)
-            for (int i = 0; i < shape.flatSize; i++)
-                this[i] = p[i];
-    }
-
-    public void Assimilate(float[,,] array)
-    {
-        fixed (float* p = array)
-            for (int i = 0; i < shape.flatSize; i++)
-                this[i] = p[i];
-    }
-
-    public void Assimilate(float[,,,] array)
-    {
-        fixed (float* p = array)
-            for (int i = 0; i < shape.flatSize; i++)
-                this[i] = p[i];
-    }
-
-    public void Assimilate(float[,,,,] array)
-    {
-        fixed (float* p = array)
-            for (int i = 0; i < shape.flatSize; i++)
-                this[i] = p[i];
-    }
-
-    public void Assimilate(float[,,,,,] array)
-    {
-        fixed (float* p = array)
-            for (int i = 0; i < shape.flatSize; i++)
-                this[i] = p[i];
+        GCHandle pinLoc = GCHandle.Alloc(array, GCHandleType.Pinned);
+        float* p = (float*)pinLoc.AddrOfPinnedObject();
+        for (int i = 0; i < shape.flatSize; i++)
+            this[i] = p[i];
+        pinLoc.Free();
     }
 
     public void CopyTo(Tensor destination, int batches = -1)
     {
-        if (batches == -1)
-            for (int i = 0; i < this.shape.flatSize; i++)
-                destination[i] = this[i];
-        else
-            for (int batch = 0; batch < batches; batch++)
-                for (int i = 0; i < shape.flatBatchSize; i++)
-                    destination[batch, i] = this[batch, i];
-    }
-
-    public static void Copy(Tensor source, Tensor destination, int batches = -1)
-    {
-        source.CopyTo(destination, batches);
+        Buffer.BlockCopy(array, 0, destination.array, 0, batches == -1? shape.flatSize * 4 : batches * shape.flatBatchSize * 4);
     }
 
     public Tensor CutAxis1()
     {
         Tensor newTensor = this.shape.rank switch
         {
-            1 => new Tensor1(this.shape.n1),
-            2 => new Tensor1(this.shape.n2),
-            3 => new Tensor2(this.shape.n2, this.shape.n3),
-            4 => new Tensor3(this.shape.n2, this.shape.n3, this.shape.n4),
-            5 => new Tensor4(this.shape.n2, this.shape.n3, this.shape.n4, this.shape.n5),
-            6 => new Tensor5(this.shape.n2, this.shape.n3, this.shape.n4, this.shape.n5, this.shape.n6)
+            1 => new Tensor(this.shape.n1),
+            2 => new Tensor(this.shape.n2),
+            3 => new Tensor(this.shape.n2, this.shape.n3),
+            4 => new Tensor(this.shape.n2, this.shape.n3, this.shape.n4),
+            5 => new Tensor(this.shape.n2, this.shape.n3, this.shape.n4, this.shape.n5),
+            6 => new Tensor(this.shape.n2, this.shape.n3, this.shape.n4, this.shape.n5, this.shape.n6)
         };
 
         this.CopyTo(newTensor, 1);
@@ -129,18 +78,21 @@ public unsafe abstract class Tensor
         return newTensor;
     }
 
-    public Tensor Reshape(ShapeInfo newShape)
+    public void Reshape(ShapeInfo newShape)
     {
         if (shape.flatSize != newShape.flatSize) throw new Exception();
+        shape = newShape;
+    }
 
-        Tensor newTensor = Create(newShape);
+    public static Tensor Reshape(ShapeInfo newShape, Tensor sourceTensor) 
+    {
+        if (sourceTensor.shape.flatSize != newShape.flatSize) throw new Exception();
 
-        this.CopyTo(newTensor);
+        var newTensor = new Tensor(newShape);
+        sourceTensor.CopyTo(newTensor);
 
         return newTensor;
     }
-
-    public static Tensor Reshape(ShapeInfo newShape, Tensor sourceTensor) => sourceTensor.Reshape(newShape);
 
     public Tensor Fill(float @const)
     {
@@ -149,10 +101,10 @@ public unsafe abstract class Tensor
         return this;
     }
 
-    public Tensor Fill(Func<float> random)
+    public Tensor Fill(Func<float> filler)
     {
         for (int i = 0; i < this.shape.flatSize; i++)
-            this[i] = random.Invoke();
+            this[i] = filler.Invoke();
         return this;
     }
 
@@ -174,11 +126,11 @@ public unsafe abstract class Tensor
     {
         Tensor tensor = array.Rank switch
         {
-            1 => new Tensor2(1, array.Length),
-            2 => new Tensor3(1, array.GetLength(0), array.GetLength(1)),
-            3 => new Tensor4(1, array.GetLength(0), array.GetLength(1), array.GetLength(2)),
-            4 => new Tensor5(1, array.GetLength(0), array.GetLength(1), array.GetLength(2), array.GetLength(3)),
-            5 => new Tensor6(1, array.GetLength(0), array.GetLength(1), array.GetLength(2), array.GetLength(3), array.GetLength(4))
+            1 => new Tensor(1, array.Length),
+            2 => new Tensor(1, array.GetLength(0), array.GetLength(1)),
+            3 => new Tensor(1, array.GetLength(0), array.GetLength(1), array.GetLength(2)),
+            4 => new Tensor(1, array.GetLength(0), array.GetLength(1), array.GetLength(2), array.GetLength(3)),
+            5 => new Tensor(1, array.GetLength(0), array.GetLength(1), array.GetLength(2), array.GetLength(3), array.GetLength(4))
         };
         tensor.Assimilate(array);
         return tensor;
@@ -192,7 +144,7 @@ public unsafe abstract class Tensor
 
         for (int i = 0; i < trainData.Length; i++)
         {
-            tensorTrainData[i] = Tensor.Create(shape);
+            tensorTrainData[i] = new Tensor(shape);
             tensorTrainData[i].Assimilate(trainData[i]);
         }
 
@@ -211,7 +163,7 @@ public unsafe abstract class Tensor
 
         for (int tt = 0; tt < tensorBatches.Length - 1; tt++)
         {
-            tensorBatches[tt] = Tensor.Create(shape);
+            tensorBatches[tt] = new Tensor(shape);
             for (int b = 0, s = 0; b < miniBatchSize; b++)
             {
                 for (int sb = 0; sb < shape.flatBatchSize; sb++, s++)
@@ -224,7 +176,7 @@ public unsafe abstract class Tensor
         if (lastBatchSize != 0)
         {
             var lastShape = shape.NeuralChange(lastBatchSize);
-            tensorBatches[^1] = Tensor.Create(lastShape);
+            tensorBatches[^1] = new Tensor(lastShape);
             for (int b = 0, s = 0; b < lastBatchSize; b++)
             {
                 for (int sb = 0; sb < lastShape.flatBatchSize; sb++, s++)
@@ -233,7 +185,7 @@ public unsafe abstract class Tensor
         }
         else
         {
-            tensorBatches[^1] = Tensor.Create(shape);
+            tensorBatches[^1] = new Tensor(shape);
             for (int b = 0, s = 0; b < miniBatchSize; b++)
             {
                 for (int sb = 0; sb < shape.flatBatchSize; sb++, s++)
@@ -244,45 +196,75 @@ public unsafe abstract class Tensor
         return tensorBatches;
     }
 
-    public float this[int flatIndex]
+    public float this[int f]
     {
-        get => ptr[flatIndex];
-        set => ptr[flatIndex] = value;
+        get => ptr[f];
+        set => ptr[f] = value;
     }
 
-    public float this[int n1, int flat]
+    public float this[int n1, int f]
     {
-        get => ptr[n1 * shape.flatBatchSize + flat];
-        set => ptr[n1 * shape.flatBatchSize + flat] = value;
+        get => ptr[n1 * shape.n26 + f];
+        set => ptr[n1 * shape.n26 + f] = value;
     }
 
-    public virtual float this[int n1, int n2, int n3]
+    public float this[int n1, int n2, int f]
     {
-        get => -1;
-        set { }
+        get => ptr[n1 * shape.n26 + n2 * shape.n36 + f];
+        set => ptr[n1 * shape.n26 + n2 * shape.n36 + f] = value;
     }
 
-    public virtual float this[int n1, int n2, int n3, int n4]
+    public float this[int n1, int n2, int n3, int f]
     {
-        get => -1;
-        set { }
+        get => ptr[n1 * shape.n26 + n2 * shape.n36 + n3 * shape.n46 + f];
+        set => ptr[n1 * shape.n26 + n2 * shape.n36 + n3 * shape.n46 + f] = value;
     }
 
-    public virtual float this[int n1, int n2, int n3, int n4, int n5]
+    public float this[int n1, int n2, int n3, int n4, int f]
     {
-        get => -1;
-        set { }
+        get => ptr[n1 * shape.n26 + n2 * shape.n36 + n3 * shape.n46 + n4 * shape.n56 + f];
+        set => ptr[n1 * shape.n26 + n2 * shape.n36 + n3 * shape.n46 + n4 * shape.n56 + f] = value;
     }
 
-    public virtual float this[int n1, int n2, int n3, int n4, int n5, int n6]
+    public float this[int n1, int n2, int n3, int n4, int n5, int n6]
     {
-        get => -1;
-        set { }
+        get => ptr[n1 * shape.n26 + n2 * shape.n36 + n3 * shape.n46 + n4 * shape.n56 + n5 * shape.n6 + n6];
+        set => ptr[n1 * shape.n26 + n2 * shape.n36 + n3 * shape.n46 + n4 * shape.n56 + n5 * shape.n6 + n6] = value;
+    }
+
+    public float this[ShapeInfo shape, int n1, int f]
+    {
+        get => ptr[n1 * shape.n26 + f];
+        set => ptr[n1 * shape.n26 + f] = value;
+    }
+
+    public float this[ShapeInfo shape, int n1, int n2, int f]
+    {
+        get => ptr[n1 * shape.n26 + n2 * shape.n36 + f];
+        set => ptr[n1 * shape.n26 + n2 * shape.n36 + f] = value;
+    }
+
+    public float this[ShapeInfo shape, int n1, int n2, int n3, int f]
+    {
+        get => ptr[n1 * shape.n26 + n2 * shape.n36 + n3 * shape.n46 + f];
+        set => ptr[n1 * shape.n26 + n2 * shape.n36 + n3 * shape.n46 + f] = value;
+    }
+
+    public float this[ShapeInfo shape, int n1, int n2, int n3, int n4, int f]
+    {
+        get => ptr[n1 * shape.n26 + n2 * shape.n36 + n3 * shape.n46 + n4 * shape.n56 + f];
+        set => ptr[n1 * shape.n26 + n2 * shape.n36 + n3 * shape.n46 + n4 * shape.n56 + f] = value;
+    }
+
+    public float this[ShapeInfo shape, int n1, int n2, int n3, int n4, int n5, int n6]
+    {
+        get => ptr[n1 * shape.n26 + n2 * shape.n36 + n3 * shape.n46 + n4 * shape.n56 + n5 * shape.n6 + n6];
+        set => ptr[n1 * shape.n26 + n2 * shape.n36 + n3 * shape.n46 + n4 * shape.n56 + n5 * shape.n6 + n6] = value;
     }
 
     public readonly struct ShapeInfo
     {
-        public readonly int n1, n2, n3, n4, n5, n6,
+        public readonly int n1, n2, n3, n4, n5, n6, n26, n36, n46, n56,
         xLength, yLength, zLength, wLength,
         channels, batchSize, flatBatchSize, flatSize;
 
@@ -311,6 +293,11 @@ public unsafe abstract class Tensor
             else n6 = 1;
 
             this.flatSize = n1 * n2 * n3 * n4 * n5 * n6;
+
+            n26 = flatSize / n1;
+            n36 = n26 / n2;
+            n46 = n36 / n3;
+            n56 = n46 / n4;
 
             this.batchSize = 1;
             this.channels = 0;
@@ -363,20 +350,11 @@ public unsafe abstract class Tensor
 
             flatBatchSize = flatSize / batchSize;
 
-            if (rank == 1) batchSize = 0;
+            if(rank == 1) batchSize = 0;
         }
 
-        public static ShapeInfo NeuralCreate(int xLength, int batchSize = 0, int channels = 0, int yLength = 0, int zLength = 0, int wLength = 0)
-        {
-            byte rank = 0;
-
-            if (wLength > 0) rank++;
-            else if (zLength > 0) rank++;
-            else if (yLength > 0) rank++;
-            else if (channels > 0) rank++;
-            else if (batchSize > 0) rank++;
-            else if (xLength > 0) rank++;
-
+        public static ShapeInfo NeuralCreate(byte rank, int xLength, int batchSize = 0, int channels = 0, int yLength = 0, int zLength = 0, int wLength = 0)
+        {        
             return rank switch
             {
                 1 => new(xLength),
@@ -391,14 +369,15 @@ public unsafe abstract class Tensor
         public ShapeInfo NeuralChange(int batchSize = -1, int channels = -1,
           int wLength = -1, int zLength = -1, int yLength = -1, int xLength = -1)
         {
-            return NeuralCreate((xLength != -1? xLength : this.xLength),
-            (batchSize != -1? batchSize : this.batchSize),
-            (channels != -1? channels : this.channels),
-            (yLength != -1? yLength : this.yLength),
-            (zLength != -1? zLength : this.zLength),
-            (wLength != -1? wLength : this.wLength));
+            return NeuralCreate(this.rank,
+            xLength != -1 ? xLength : this.xLength,
+            batchSize != -1 ? batchSize : this.batchSize,
+            channels != -1 ? channels : this.channels,
+            yLength != -1 ? yLength : this.yLength,
+            zLength != -1 ? zLength : this.zLength,
+            wLength != -1 ? wLength : this.wLength);
         }
-        
+
         public static ShapeInfo GetInfo(Array array) => array.Rank switch
         {
             1 => new(array.Length),
@@ -409,7 +388,7 @@ public unsafe abstract class Tensor
             6 => new(array.GetLength(0), array.GetLength(1), array.GetLength(2), array.GetLength(3), array.GetLength(4), array.GetLength(5)),
             _ => throw new Exception(),
         };
-        
+
         public static implicit operator ShapeInfo(int x)
         => new(x);
         public static implicit operator ShapeInfo((int n1, int n2) tupl)
@@ -423,126 +402,4 @@ public unsafe abstract class Tensor
         public static implicit operator ShapeInfo((int n1, int n2, int n3, int n4, int n5, int n6) tupl)
         => new(tupl.n1, tupl.n2, tupl.n3, tupl.n4, tupl.n5, tupl.n6);
     }
-
-    public abstract Array ToArray();
-}
-
-public unsafe sealed class Tensor1 : Tensor
-{
-    readonly float[] array1;
-
-    public Tensor1(int n1) : base(n1)
-    {
-        array1 = new float[n1];
-
-        PinAndRef(array1);
-    }
-
-    internal Tensor1(float[] array) : base(ShapeInfo.GetInfo(array)) => array1 = array;
-
-    public sealed override Array ToArray() => array1;
-} 
-
-public unsafe sealed class Tensor2 : Tensor
-{
-    readonly float[,] array2;
-
-    public Tensor2(int n1, int n2) : base(n1, n2)
-    {
-        array2 = new float[n1, n2];
-
-        PinAndRef(array2);
-    }
-
-    internal Tensor2(float[,] array) : base(ShapeInfo.GetInfo(array)) => array2 = array;
-
-    public sealed override Array ToArray() => array2;
-}
-
-public unsafe sealed class Tensor3 : Tensor
-{
-    readonly float[,,] array3;
-
-    public Tensor3(int n1, int n2, int n3) : base(n1, n2, n3)
-    {
-        array3 = new float[n1, n2, n3];
-
-        PinAndRef(array3);
-    }
-
-    internal Tensor3(float[,,] array) : base(ShapeInfo.GetInfo(array)) => array3 = array;
-
-    public sealed override float this[int n1, int n2, int n3]
-    {
-        get => array3[n1, n2, n3];
-        set => array3[n1, n2, n3] = value;
-    }
-
-    public sealed override Array ToArray() => array3;
-}
-
-public unsafe sealed class Tensor4 : Tensor
-{
-    readonly float[,,,] array4;
-
-    public Tensor4(int n1, int n2, int n3, int n4) : base(n1, n2, n3, n4)
-    {
-        array4 = new float[n1, n2, n3, n4];
-
-        PinAndRef(array4);
-    }
-
-    internal Tensor4(float[,,,] array) : base(ShapeInfo.GetInfo(array)) => array4 = array;
-
-    public sealed override float this[int n1, int n2, int n3, int n4]
-    {
-        get => array4[n1, n2, n3, n4];
-        set => array4[n1, n2, n3, n4] = value;
-    }
-
-    public sealed override Array ToArray() => array4;
-}
-
-public unsafe sealed class Tensor5 : Tensor
-{
-    readonly float[,,,,] array5;
-
-    public Tensor5(int n1, int n2, int n3, int n4, int n5) : base(n1, n2, n3, n4, n5)
-    {
-        array5 = new float[n1, n2, n3, n4, n5];
-
-        PinAndRef(array5);
-    }
-
-    internal Tensor5(float[,,,,] array) : base(ShapeInfo.GetInfo(array)) => array5 = array;
-
-    public sealed override float this[int n1, int n2, int n3, int n4, int n5]
-    {
-        get => array5[n1, n2, n3, n4, n5];
-        set => array5[n1, n2, n3, n4, n5] = value;
-    }
-
-    public sealed override Array ToArray() => array5;
-}
-
-public unsafe sealed class Tensor6 : Tensor
-{
-    readonly float[,,,,,] array6;
-
-    public Tensor6(int n1, int n2, int n3, int n4, int n5, int n6) : base(n1, n2, n3, n4, n5, n6)
-    {
-        array6 = new float[n1, n2, n3, n4, n5, n6];
-
-        PinAndRef(array6);
-    }
-
-    internal Tensor6(float[,,,,,] array) : base(ShapeInfo.GetInfo(array)) => array6 = array;
-
-    public sealed override float this[int n1, int n2, int n3, int n4, int n5, int n6]
-    {
-        get => array6[n1, n2, n3, n4, n5, n6];
-        set => array6[n1, n2, n3, n4, n5, n6] = value;
-    }
-
-    public sealed override Array ToArray() => array6;
 }

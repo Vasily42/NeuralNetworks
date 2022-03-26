@@ -1,6 +1,6 @@
 namespace NeuralNetwork;
 
-public unsafe class Convolution2D : CalcLayer
+public unsafe class Convolution2D : Layer, IParameterized
 {
     private Tensor kernel, kernelGradient, bias, biasGradient;
 
@@ -12,6 +12,10 @@ public unsafe class Convolution2D : CalcLayer
     internal readonly (byte x, byte y) strides, kernelSize;
     private readonly Padding2D paddingLayer;
 
+    protected Func<float> randomInitNum;
+
+    protected readonly bool NonTrainable;
+
     public Convolution2D(int numberOfFilters,
     (byte x, byte y) kernelSize,
     (byte x, byte y) strides,
@@ -20,7 +24,7 @@ public unsafe class Convolution2D : CalcLayer
     string parameterInitialization = "kaiming",
     Regularization kernelReg = null,
     Regularization biasReg = null,
-    bool NonTrainable = false) : base(activationFunction, parameterInitialization, NonTrainable)
+    bool NonTrainable = false)
     {
         this.numberOfFilters = numberOfFilters;
         this.kernelSize = kernelSize;
@@ -32,6 +36,13 @@ public unsafe class Convolution2D : CalcLayer
         }
         this.kernelReg = kernelReg;
         this.biasReg = biasReg;
+        this.NonTrainable = NonTrainable;
+        InsertActivation(activationFunction);
+        randomInitNum = parameterInitialization switch
+        {
+            "xavier" => Xavier,
+            "kaiming" => Kaiming
+        };
     }
 
     public sealed override void Init(Optimizer optimizer)
@@ -42,24 +53,31 @@ public unsafe class Convolution2D : CalcLayer
         outputShape = inputShape.NeuralChange(
         channels: numberOfFilters, xLength: outXLength, yLength: outYLength);
 
-        fanIn = (int)(kernelSize.x * kernelSize.y) * inputShape.channels;
-        fanOut = (int)(kernelSize.x * kernelSize.x) * outputShape.channels;
+        inputDerivatives = new Tensor(inputShape);
+        input = new Tensor(inputShape);
+        output = new Tensor(outputShape);
+        outputDerivatives = new Tensor(outputShape);
 
-        inputDerivatives = Tensor.Create(inputShape);
-        input = Tensor.Create(inputShape);
-        output = Tensor.Create(outputShape);
-        outputDerivatives = Tensor.Create(outputShape);
-
-        bias = new Tensor1(outputShape.channels).Fill(0);
-        biasGradient = new Tensor1(outputShape.channels).Fill(0);
+        bias = new Tensor(outputShape.channels).Fill(0);
+        biasGradient = new Tensor(outputShape.channels).Fill(0);
         biasOpt = optimizer.GetCopy();
         biasOpt.Init(bias.shape.flatSize);
 
-        kernel = new Tensor4(numberOfFilters, inputShape.channels, kernelSize.y, kernelSize.x).Fill(randomInitNum);
-        kernelGradient = new Tensor4(numberOfFilters, inputShape.channels, kernelSize.y, kernelSize.x).Fill(0);
+        kernel = new Tensor(numberOfFilters, inputShape.channels, kernelSize.y, kernelSize.x).Fill(randomInitNum);
+        kernelGradient = new Tensor(numberOfFilters, inputShape.channels, kernelSize.y, kernelSize.x).Fill(0);
         kernelOpt = optimizer.GetCopy();
         kernelOpt.Init(kernel.shape.flatSize);
+    }
 
+    public void Reset()
+    {
+        bias.Fill(0);
+        biasGradient.Fill(0);
+        biasOpt.Reset();
+
+        kernel.Fill(randomInitNum);
+        kernelGradient.Fill(0);
+        kernelOpt.Reset();
     }
 
     protected sealed override void ForwardAction(int batch)
@@ -115,7 +133,7 @@ public unsafe class Convolution2D : CalcLayer
                 }
     }
 
-    public sealed override void Correction()
+    public void Correction()
     {
         if (NonTrainable) return;
 
@@ -125,4 +143,7 @@ public unsafe class Convolution2D : CalcLayer
         kernelReg?.GradPenalty(kernel, kernelGradient);
         kernelOpt.Update(kernel, kernelGradient);
     }
+
+    float Xavier() => MathF.Sqrt(6f / (kernelSize.x * kernelSize.y * inputShape.channels + kernelSize.x * kernelSize.y * outputShape.channels) * (2 * StGeneral.NextFloat() - 1));
+    float Kaiming() => MathF.Sqrt(2f / (kernelSize.x * kernelSize.y * inputShape.channels)) * (2 * StGeneral.NextFloat() - 1);
 }

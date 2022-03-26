@@ -6,10 +6,10 @@ public abstract unsafe class ActivationLayer : Layer
     {
         outputShape = inputShape;
 
-        input = Tensor.Create(inputShape);
-        inputDerivatives = Tensor.Create(inputShape);
-        output = Tensor.Create(outputShape);
-        outputDerivatives = Tensor.Create(outputShape);
+        input = new Tensor(inputShape);
+        inputDerivatives = new Tensor(inputShape);
+        output = new Tensor(outputShape);
+        outputDerivatives = new Tensor(outputShape);
     }
 
     public static ActivationLayer CreateActivation(string name) => name.ToLower() switch

@@ -1,8 +1,9 @@
 using System.ComponentModel.DataAnnotations;
+using System.Security.AccessControl;
 
 namespace NeuralNetwork;
 
-public unsafe class Dense : CalcLayer
+public unsafe class Dense : Layer, IParameterized
 {
     private Tensor kernel, kernelGradient, bias, biasGradient;
 
@@ -12,36 +13,54 @@ public unsafe class Dense : CalcLayer
 
     private readonly int numOfNeurons;
 
+    protected Func<float> randomInitNum;
+
+    protected readonly bool NonTrainable;
+
     public Dense(int numOfNeurons, string activationFunction = "linear", string parameterInitialization = "kaiming", Regularization kernelReg = null,
-    Regularization biasReg = null, bool NonTrainable = false) :
-    base(activationFunction, parameterInitialization, NonTrainable)
+    Regularization biasReg = null, bool NonTrainable = false)
     {
         this.numOfNeurons = numOfNeurons;
         this.kernelReg = kernelReg;
         this.biasReg = biasReg;
+        this.NonTrainable = NonTrainable;
+        InsertActivation(activationFunction);
+        randomInitNum = parameterInitialization switch
+        {
+            "xavier" => Xavier,
+            "kaiming" => Kaiming
+        };
     }
 
     public sealed override void Init(Optimizer optimizer)
     {
         outputShape = inputShape.NeuralChange(xLength: numOfNeurons);
 
-        base.fanIn = inputShape.xLength;
-        base.fanOut = outputShape.xLength;
+        input = new Tensor(inputShape);
+        inputDerivatives = new Tensor(inputShape);
+        output = new Tensor(outputShape);
+        outputDerivatives = new Tensor(outputShape);
 
-        input = Tensor.Create(inputShape);
-        inputDerivatives = Tensor.Create(inputShape);
-        output = Tensor.Create(outputShape);
-        outputDerivatives = Tensor.Create(outputShape);
-
-        bias = new Tensor1(outputShape.xLength).Fill(0);
-        biasGradient = new Tensor1(outputShape.xLength).Fill(0);
+        bias = new Tensor(outputShape.xLength).Fill(0);
+        biasGradient = new Tensor(outputShape.xLength).Fill(0);
         biasOpt = optimizer.GetCopy();
         biasOpt.Init(bias.shape.flatSize);
 
-        kernel = new Tensor2(inputShape.xLength, outputShape.xLength).Fill(randomInitNum);
-        kernelGradient = new Tensor2(inputShape.xLength, outputShape.xLength).Fill(0);
+        kernel = new Tensor(inputShape.xLength, outputShape.xLength).Fill(randomInitNum);
+        kernelGradient = new Tensor(inputShape.xLength, outputShape.xLength).Fill(0);
         kernelOpt = optimizer.GetCopy();
         kernelOpt.Init(kernel.shape.flatSize);
+    }
+
+    public void Reset()
+    {
+        bias.Fill(0);
+        biasGradient.Fill(0);
+        biasOpt.Reset();
+
+        kernel.Fill(randomInitNum);
+        kernelGradient.Fill(0);
+        kernelOpt.Reset();
     }
 
     protected sealed override void ForwardAction(int batch)
@@ -80,15 +99,19 @@ public unsafe class Dense : CalcLayer
         }
     }
 
-    public sealed override void Correction()
+    public void Correction()
     {
         if (NonTrainable) return;
-        
+
         biasReg?.GradPenalty(bias, biasGradient);
         biasOpt.Update(bias, biasGradient);
 
         kernelReg?.GradPenalty(kernel, kernelGradient);
         kernelOpt.Update(kernel, kernelGradient);
-        
+
     }
+
+    float Xavier() => MathF.Sqrt(6f / (inputShape.xLength + outputShape.xLength)) * (2 * StGeneral.NextFloat() - 1);
+
+    float Kaiming() => MathF.Sqrt(2f / inputShape.xLength) * (2 * StGeneral.NextFloat() - 1);
 }

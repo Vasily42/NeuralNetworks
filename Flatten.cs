@@ -5,10 +5,10 @@ public unsafe class Flatten : Layer
     public sealed override void Init(Optimizer optimizer)
     {
         outputShape = new Tensor.ShapeInfo(inputShape.batchSize, inputShape.flatBatchSize);
-        output = Tensor.Create(outputShape);
-        outputDerivatives = Tensor.Create(outputShape);
-        input = Tensor.Create(inputShape);
-        inputDerivatives = Tensor.Create(inputShape);
+        input = new Tensor(inputShape);
+        inputDerivatives = new Tensor(inputShape);
+        output = new Tensor(outputShape);
+        outputDerivatives = new Tensor(outputShape);
     }
 
     protected sealed override void ForwardAction(int batch)

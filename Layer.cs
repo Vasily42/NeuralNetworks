@@ -35,16 +35,22 @@ public abstract class Layer
         }
 
         Init(optimizer);
+        Console.WriteLine(this.inputShape.flatSize + "  " + this.inputShape.flatBatchSize);
+        Console.WriteLine(this.outputShape.flatSize + "  " + this.outputShape.flatBatchSize);
+        Console.WriteLine();
         //Console.WriteLine(nextLayer);
         nextLayer?.InitGraph(optimizer);
     }
 
+    public void ResetGraph()
+    {
+        if (this is IParameterized parameterized) parameterized.Reset();
+        nextLayer?.ResetGraph();
+    }
+
     public void ParameterCorrection()
     {
-        if (this is CalcLayer calc)
-        {
-            calc.Correction();
-        }
+        if (this is IParameterized parameterized) parameterized.Correction();
         nextLayer?.ParameterCorrection();
     }
 

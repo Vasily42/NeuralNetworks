@@ -36,14 +36,12 @@ public unsafe class Pooling2D : Layer
 
         outputShape = inputShape.NeuralChange(xLength: outXLength, yLength: outYLength);
 
-        input = Tensor.Create(inputShape);
+        input = new Tensor(inputShape);
+        inputDerivatives = new Tensor(inputShape);
+        output = new Tensor(outputShape);
+        outputDerivatives = new Tensor(outputShape);
 
-        inputDerivatives = Tensor.Create(inputShape);
         inputDerivatives.Fill(0);
-
-        output = Tensor.Create(outputShape);
-
-        outputDerivatives = Tensor.Create(outputShape);
 
         indexedOut = new (ushort y, ushort x)[inputShape.batchSize, inputShape.channels,
         outYLength, outXLength];

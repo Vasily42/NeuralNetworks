@@ -39,10 +39,10 @@ public unsafe class Padding2D : Layer
         inputShape.xLength + paddingShiftStart.x + paddingShiftEnd.x,
         yLength: inputShape.yLength + paddingShiftStart.y + paddingShiftEnd.y);
 
-        input = Tensor.Create(inputShape);
-        inputDerivatives = Tensor.Create(inputShape);
-        output = Tensor.Create(outputShape);
-        outputDerivatives = Tensor.Create(outputShape);
+        input = new Tensor(inputShape);
+        inputDerivatives = new Tensor(inputShape);
+        output = new Tensor(outputShape);
+        outputDerivatives = new Tensor(outputShape);
         output.Fill(paddingConst);
     }
 

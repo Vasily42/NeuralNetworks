@@ -22,9 +22,9 @@ public unsafe class Dropout : Layer
     {
         outputShape = inputShape;
 
-        input = Tensor.Create(inputShape);
+        input = new Tensor(inputShape);
 
-        outputDerivatives = Tensor.Create(outputShape);
+        outputDerivatives = new Tensor(outputShape);
 
         dropped = new bool[inputShape.flatBatchSize];
     }

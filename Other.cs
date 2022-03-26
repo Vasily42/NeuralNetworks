@@ -1,5 +1,11 @@
 namespace NeuralNetwork;
 
+interface IParameterized
+{
+    void Correction();
+    void Reset();
+}
+
 internal static class StGeneral
 {
     static public float NextFloat() =>

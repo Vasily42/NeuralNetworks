@@ -1,3 +1,5 @@
+using System.Reflection;
+
 namespace NeuralNetwork;
 
 public abstract class Model
@@ -101,6 +103,11 @@ public sealed class Sequential : Model
     public void BackProp(Array ideal)
     {
         BackPropBatch(Tensor.AddBatchDimension(ideal));
+    }
+
+    public void ResetModel()
+    {
+        firstLayer.ResetGraph();
     }
 
     public void Train(Tensor[] forwardData, Tensor[] backPropData, int epochsToTrain = 1)

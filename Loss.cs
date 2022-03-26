@@ -9,8 +9,8 @@ public unsafe abstract class Loss : Layer
 
     public override void Init(Optimizer optimizer)
     {
-        input = Tensor.Create(inputShape);
-        inputDerivatives = Tensor.Create(inputShape);
+        input = new Tensor(inputShape);
+        inputDerivatives = new Tensor(inputShape);
     }
 
     public static Loss CreateLoss(string lossName) => lossName.ToLower() switch

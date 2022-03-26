@@ -21,6 +21,8 @@ public abstract class Optimizer
 
     public abstract void Init(int flatSize);
 
+    public abstract void Reset();
+
     public abstract void Update(Tensor weights, Tensor gradient);
 
     public abstract Optimizer GetCopy();
@@ -41,11 +43,9 @@ public unsafe class SGD : Optimizer
         else this._nesterov = false;
     }
 
-    public sealed override void Init(int flatSize)
-    {
-        this.momentum = new Tensor1(flatSize).Fill(0);
-    }
+    public sealed override void Init(int flatSize) => this.momentum = new Tensor(flatSize).Fill(0);
 
+    public sealed override void Reset() => momentum.Fill(0);
     public sealed override void Update(Tensor weights, Tensor gradient)
     {
         for (int i = 0; i < weights.shape.flatSize; i++)
@@ -94,8 +94,14 @@ public unsafe class Adam : Optimizer
 
     public sealed override void Init(int flatSize)
     {
-        firstMomentum = new Tensor1(flatSize).Fill(0);
-        secondMomentum = new Tensor1(flatSize).Fill(0);
+        firstMomentum = new Tensor(flatSize).Fill(0);
+        secondMomentum = new Tensor(flatSize).Fill(0);
+    }
+
+    public sealed override void Reset()
+    {
+        firstMomentum.Fill(0);
+        secondMomentum.Fill(0);
     }
 
     public sealed override void Update(Tensor weights, Tensor gradient)
