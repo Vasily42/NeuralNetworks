@@ -1,5 +1,4 @@
-using System.ComponentModel.DataAnnotations;
-using System.Security.AccessControl;
+using System.Numerics;
 
 namespace NeuralNetwork;
 
@@ -8,7 +7,7 @@ public unsafe class Dense : Layer, IParameterized
     private Tensor kernel, kernelGradient, bias, biasGradient;
 
     Optimizer kernelOpt, biasOpt;
-
+    
     Regularization kernelReg, biasReg;
 
     private readonly int numOfNeurons;
@@ -67,34 +66,38 @@ public unsafe class Dense : Layer, IParameterized
     {
         float sum;
 
-        for (int NThis = 0; NThis < outputShape.xLength; NThis++)
+        var vecLen = Vector<float>.Count;
+
+        int iB, i = 0;
+
+        for (int nthis = 0; nthis < outputShape.xLength; nthis++)
         {
             sum = 0;
 
-            for (int NNext = 0; NNext < inputShape.xLength; NNext++)
+            for (int nnext = 0; nnext < inputShape.xLength; nnext++)
             {
-                sum += this.input[batch, NNext] * kernel[NNext, NThis];
+                sum += this.input[batch, nnext] * kernel[nnext, nthis];
             }
 
-            sum += bias[NThis];
-            this.output[batch, NThis] = sum;
+            sum += bias[nthis];
+            this.output[batch, nthis] = sum;
         }
     }
 
     protected sealed override void BackPropAction(int batch)
     {
-        for (int NThis = 0; NThis < outputShape.xLength; NThis++)
+        for (int nthis = 0; nthis < outputShape.xLength; nthis++)
         {
-            biasGradient[NThis] += outputDerivatives[batch, NThis];
+            biasGradient[nthis] += outputDerivatives[batch, nthis];
         }
 
-        for (int NNext = 0; NNext < inputShape.xLength; NNext++)
+        for (int nnext = 0; nnext < inputShape.xLength; nnext++)
         {
-            inputDerivatives[batch, NNext] = 0;
-            for (int NThis = 0; NThis < outputShape.xLength; NThis++)
+            inputDerivatives[batch, nnext] = 0;
+            for (int nthis = 0; nthis < outputShape.xLength; nthis++)
             {
-                kernelGradient[NNext, NThis] += this.input[batch, NNext] * outputDerivatives[batch, NThis];
-                inputDerivatives[batch, NNext] += kernel[NNext, NThis] * outputDerivatives[batch, NThis];
+                kernelGradient[nnext, nthis] += this.input[batch, nnext] * outputDerivatives[batch, nthis];
+                inputDerivatives[batch, nnext] += kernel[nnext, nthis] * outputDerivatives[batch, nthis];
             }
         }
     }
@@ -103,8 +106,12 @@ public unsafe class Dense : Layer, IParameterized
     {
         if (NonTrainable) return;
 
+        biasGradient /= inputShape.batchSize;
+
         biasReg?.GradPenalty(bias, biasGradient);
         biasOpt.Update(bias, biasGradient);
+
+        kernelGradient /= inputShape.batchSize;
 
         kernelReg?.GradPenalty(kernel, kernelGradient);
         kernelOpt.Update(kernel, kernelGradient);

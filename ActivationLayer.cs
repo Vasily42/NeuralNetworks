@@ -2,7 +2,7 @@ namespace NeuralNetwork;
 
 public abstract unsafe class ActivationLayer : Layer
 {
-    public sealed override void Init(Optimizer optimizer)
+    public override void Init(Optimizer optimizer)
     {
         outputShape = inputShape;
 
@@ -47,7 +47,7 @@ public class Sigmoid : ActivationLayer
 {
     protected sealed override float Activation(float x) => 1f / (1 + MathF.Exp(-x));
 
-    protected sealed override float Derivative(float y, float x) => ((1 - y) * y) + 0.02f;
+    protected sealed override float Derivative(float y, float x) => ((1 - y) * y);
 }
 
 public class Tangens : ActivationLayer
@@ -56,7 +56,7 @@ public class Tangens : ActivationLayer
 
     protected sealed override float Derivative(float y, float x)
     {
-        return (1 - y * y) + 0.02f;
+        return (1 - y * y);
     }
 }
 
@@ -83,17 +83,28 @@ public class Swish : ActivationLayer
 
 public unsafe class Softmax : ActivationLayer
 {
+    Tensor cache;
+
+    public sealed override void Init(Optimizer optimizer)
+    {
+        base.Init(optimizer);
+
+        cache = inputShape;
+    }
+
     protected sealed override void ForwardAction(int batch)
     {
-        float sum = epsilon;
+        float sum = 0;
+        float max = input.Max(batch);
         for (int i = 0; i < inputShape.flatBatchSize; i++)
         {
-            sum += MathF.Exp(input[batch, i]);
+            cache[batch, i] = MathF.Exp(input[batch, i] - max);
+            sum += cache[batch, i];
         }
 
         for (int i = 0; i < inputShape.flatBatchSize; i++)
         {
-            output[batch, i] = MathF.Exp(input[batch, i] + epsilon) / sum;
+            output[batch, i] = cache[batch, i] / (sum + epsilon);
         }
     }
 
@@ -115,7 +126,7 @@ public unsafe class Softmax : ActivationLayer
                     sum += -output[batch, i] * output[batch, j] * outputDerivatives[batch, i];
                 }
             }
-            outputDerivatives[batch, j] = sum;
+            inputDerivatives[batch, j] = sum;
         }
     }
 }

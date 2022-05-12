@@ -1,10 +1,10 @@
-using System.Reflection;
-
 namespace NeuralNetwork;
 
 public abstract class Model
 {
     public bool Initialized { get; protected set; }
+
+    protected LayerCommander commander;
 
     internal long iteration;
     public long Iteration => iteration;
@@ -19,18 +19,54 @@ public abstract class Model
     }
 }
 
+// public sealed class NonSequential : Model
+// {
+//     public event Action<float> ErrorRendering, IterationRendering, EpochRendering;
+
+//     private Input[] inputs;
+//     private Output[] outputs;
+//     private Loss[] losses;
+
+//     public void Init(Input[] inputs, Output[] outputs, dynamic optimizer, dynamic losses)
+//     {
+//         this.inputs = inputs;
+//         this.outputs = outputs;
+
+//         if (losses is Loss[] arr)
+//             this.losses = arr;
+//         else if (losses is string[] arrStr)
+//             this.losses = arrStr.Select(s => Loss.CreateLoss(s)).ToArray();
+//         else throw new Exception("wrong format of losses");
+
+//         commander = new LayerCommander();
+
+//         Optimizer optimizer0;
+//         if (optimizer is string)
+//             optimizer0 = Optimizer.GetOptimizer(optimizer);
+//         else
+//             optimizer0 = optimizer;
+
+//         for (int i = 0; i < inputs.Length; i++) inputs[i].InitGraph(optimizer0, commander);
+//     }
+
+//     public void ForwardBatch(Tensor[] forwardData)
+//     {
+
+//     }
+// }
+
 public sealed class Sequential : Model
 {
-    public event Action<float> ErrorRendering, IterationRendering, EpochRendering;
+    public Tensor Output => lastLayer.output.GetCopy();
 
-    public Tensor Answer => loss.Predicted;
     public float ComputeError(Array ideal)
     {
         Tensor tensor = Tensor.AddBatchDimension(ideal);
-        return loss.ComputeError(tensor);
+        return loss.ComputeError(tensor, Output);
     }
 
     private Input firstLayer;
+    private Output lastLayer;
     private Layer tempLayer;
     private Loss loss;
     private int helpIndex = 0;
@@ -40,11 +76,8 @@ public sealed class Sequential : Model
         if (helpIndex == 0)
         {
             if (layer is not Input input) throw new Exception();
-            else
-            {
-                firstLayer = input;
-            }
-            tempLayer = layer.Leave;
+            else firstLayer = input;
+            tempLayer = layer;
             helpIndex++;
             return;
         }
@@ -60,44 +93,56 @@ public sealed class Sequential : Model
         else
             optimizer0 = optimizer;
 
-        if (tempLayer is not Loss)
-        {
-            if (loss is string)
-                this.loss = Loss.CreateLoss(loss);
-            else
-                this.loss = loss;
+        if (tempLayer is Output o)
+        lastLayer = o;
+        else lastLayer = (Output)new Output().Apply(tempLayer);
 
-            this.loss.Apply(tempLayer);
-        }
-        else this.loss = (Loss)tempLayer;
+        if (loss is string)
+            this.loss = Loss.CreateLoss(loss);
+        else
+            this.loss = loss;
 
-        firstLayer.InitGraph(optimizer0);
+        commander = new LayerCommander();
+
+        firstLayer.InitGraph(optimizer0, commander);
 
         Training = true;
         Initialized = true;
     }
 
-    public void ForwardBatch(Tensor input)
+    public void ForwardBatch(Tensor forwardData)
     {
-        firstLayer.Forward(input, Training);
+        firstLayer.Forward(forwardData, Training);
     }
 
-    public Tensor Forward(Array input)
+    public Tensor Forward(Tensor forwardData)
     {
-        firstLayer.Forward(Tensor.
-        AddBatchDimension(input), Training);
-        return loss.Predicted;
+        firstLayer.Forward(forwardData, Training);
+        return Output;
+    }
+
+    public Tensor Forward(Array forwardData)
+    {
+        firstLayer.Forward(forwardData, Training);
+        return Output;
     }
 
     public void BackPropBatch(Tensor ideal)
     {
-        loss.BackProp(ideal);
+        Tensor deriv = loss.Derivate(ideal, lastLayer.OutputTensor);
 
-        ErrorRendering?.Invoke(loss.LossValue);
+        lastLayer.BackProp(deriv);
 
-        firstLayer.ParameterCorrection();
+        //ErrorRendering?.Invoke(loss.LossValue);
+
+        commander.CorrectionForAll();
 
         iteration++;
+    }
+
+    public void BackProp(Tensor ideal)
+    {
+        BackPropBatch(ideal);
     }
 
     public void BackProp(Array ideal)
@@ -107,12 +152,18 @@ public sealed class Sequential : Model
 
     public void ResetModel()
     {
-        firstLayer.ResetGraph();
+        commander.ResetForAll();
     }
 
-    public void Train(Tensor[] forwardData, Tensor[] backPropData, int epochsToTrain = 1)
+    public void Train(Tensor[] forwardData, Tensor[] backPropData, int epochsToTrain = 1, bool batched = false, Action<long> IterationRendering = null, Action<long> EpochRendering = null, Action<float> LossRendering = null)
     {
         Training = true;
+
+        if (!batched) 
+        {
+            forwardData = Tensor.GetTrainBatches(forwardData, firstLayer.inputShape.batchSize);
+            backPropData =  Tensor.GetTrainBatches(backPropData, firstLayer.inputShape.batchSize);
+        }
 
         for (int epoch = 0; epoch < epochsToTrain; epoch++)
         {
@@ -121,6 +172,7 @@ public sealed class Sequential : Model
                 this.ForwardBatch(forwardData[i]);
                 this.BackPropBatch(backPropData[i]);
                 IterationRendering?.Invoke(epoch * forwardData.Length + i);
+                LossRendering?.Invoke(loss.LossValue);
             }
             EpochRendering?.Invoke(epoch);
         }
@@ -133,7 +185,7 @@ public sealed class Sequential : Model
         Tensor[] batchesForward = Tensor.GetTrainBatches(forwardData, firstLayer.inputShape.batchSize);
         Tensor[] batchesBackProp = Tensor.GetTrainBatches(backPropData, firstLayer.inputShape.batchSize);
 
-        Train(batchesForward, batchesBackProp, epochsToTrain);
+        Train(batchesForward, batchesBackProp, epochsToTrain, batched: true);
     }
 
     public (double accuracy, double lossValue) OneHotTest(Tensor[] forwardData, Tensor[] idealBackPropData)
@@ -146,10 +198,10 @@ public sealed class Sequential : Model
         {
             firstLayer.Forward(forwardData[i], false);
 
-            if (loss.Predicted.IndexOfMax() == idealBackPropData[i].IndexOfMax())
+            if (Output.IndexOfMax() == idealBackPropData[i].IndexOfMax())
                 pass++;
 
-            lossValueAverage += loss.ComputeError(idealBackPropData[i]);
+            lossValueAverage += loss.ComputeError(idealBackPropData[i], Output);
         }
 
         lossValueAverage /= forwardData.Length;

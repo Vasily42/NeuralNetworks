@@ -4,62 +4,98 @@ public abstract class Layer
 {
     protected const float epsilon = 1.0E-8F;
 
+    protected bool initialized = false;
+
     internal Layer nextLayer, prevLayer;
 
-    protected Tensor input, output, inputDerivatives, outputDerivatives;
+    internal Tensor input, output, inputDerivatives, outputDerivatives;
+
+    public virtual Tensor OutputTensor => output.GetCopy();
 
     internal Tensor.ShapeInfo inputShape, outputShape;
 
-    internal Layer Leave => nextLayer == null ? this : nextLayer.Leave;
+    public Layer Tail => nextLayer == null ? this : nextLayer.Tail;
 
-    internal Layer Root => prevLayer == null ? this : prevLayer.Root;
+    public Layer Head => prevLayer == null ? this  : prevLayer.Head;
 
-    public Layer Apply(Layer prevLayer)
+    internal void ConnectTo(dynamic nextBlock)
     {
-        var temp = prevLayer.Leave;
+        if (nextBlock is Array) ConnectToArray(nextBlock);
+        else ConnectToSeq(nextBlock);
+    }
 
-        temp.nextLayer = Root;
+    protected virtual void ConnectToSeq(Layer nextLayer)
+    {
+        this.nextLayer = nextLayer;
+    }
 
-        Root.prevLayer = temp;
+    protected virtual void ConnectToArray(Layer[] nextLayers)
+    {
+        Copy copyLayer = new();
 
-        return Leave;
+        copyLayer.ConnectToArray(nextLayers);
+
+        ConnectTo(copyLayer);
+    }
+
+    public Layer Apply(dynamic prevBlock)
+    {
+        if (prevBlock is Array) return Head.ApplyArray(prevBlock).Tail;
+        else return Head.ApplySeq(prevBlock.Tail).Tail;
+    }
+
+    internal virtual Layer ApplySeq(Layer prevLayer)
+    {
+        this.prevLayer = prevLayer;
+
+        prevLayer.ConnectTo(this);
+
+        return this;
+    }
+
+    internal virtual Layer ApplyArray(Layer[] prevLayers)
+    {
+        Layer concat = new Concat();
+
+        concat.ApplyArray(prevLayers);
+
+        ApplySeq(concat);
+
+        return this;
     }
 
     public virtual void Init(Optimizer optimizer) { }
 
-    public void InitGraph(Optimizer optimizer)
+    public virtual void InitGraph(Optimizer optimizer = null, LayerCommander commander = null)
     {
-        if (prevLayer != null)
+        if (!initialized)
         {
-            this.inputShape = prevLayer.outputShape;
-        }
+            initialized = true;
+            commander?.AddLayer(this);
+            if (prevLayer != null)
+            {
+                this.inputShape = prevLayer.outputShape;
+            }
 
-        Init(optimizer);
-        Console.WriteLine(this.inputShape.flatSize + "  " + this.inputShape.flatBatchSize);
-        Console.WriteLine(this.outputShape.flatSize + "  " + this.outputShape.flatBatchSize);
-        Console.WriteLine();
-        //Console.WriteLine(nextLayer);
-        nextLayer?.InitGraph(optimizer);
+            Init(optimizer);
+        }
+        nextLayer?.InitGraph(optimizer, commander);
     }
 
-    public void ResetGraph()
+    public virtual void Reset()
     {
         if (this is IParameterized parameterized) parameterized.Reset();
-        nextLayer?.ResetGraph();
     }
 
-    public void ParameterCorrection()
+    public virtual void ParameterCorrection()
     {
         if (this is IParameterized parameterized) parameterized.Correction();
-        nextLayer?.ParameterCorrection();
     }
-
-    protected void InsertAhead(Layer layer) => layer.Apply(this);
 
     protected void InsertActivation(string activationName = null)
     {
         if (activationName != null && activationName.ToLower() != "linear")
-            InsertAhead(ActivationLayer.CreateActivation(activationName));
+            ActivationLayer.CreateActivation(activationName).Apply(this);
     }
 
     //	protected virtual void WriteWeights(BinaryWriter writer);
@@ -73,8 +109,7 @@ public abstract class Layer
     public virtual void Forward(Tensor input, in int actualMBSize, in bool training)
     {
         input.CopyTo(this.input, actualMBSize);
-        for (int i = 0; i < actualMBSize; i++)
-            ForwardAction(i);
+        Parallel.For(0, actualMBSize, ForwardAction);
         nextLayer?.Forward(this.output, in actualMBSize, in training);
     }
 
@@ -83,10 +118,43 @@ public abstract class Layer
     public virtual void BackProp(Tensor deriv, in int actualMBSize)
     {
         deriv.CopyTo(outputDerivatives, actualMBSize);
-        for (int i = 0; i < actualMBSize; i++)
-            BackPropAction(i);
+        Parallel.For(0, actualMBSize, BackPropAction);
         prevLayer?.BackProp(inputDerivatives, in actualMBSize);
     }
 
     protected virtual void BackPropAction(int batch) { }
+
+    public static Layer[] operator +(Layer a, Layer b)
+    {
+        return new Layer[2] { a, b };
+    }
+
+    public static Layer[] operator +(Layer[] arr, Layer a)
+    {
+        Layer[] newArr = new Layer[arr.Length + 1];
+        for (int i = 0; i < arr.Length; i++) newArr[i] = arr[i];
+        newArr[^1] = a;
+        return newArr;
+    }
+
+    public static Layer operator /(Layer a, Layer b)
+    {
+        return b.ApplySeq(a);
+    }
+
+    public static Layer operator /(Layer[] arr, Layer a)
+    {
+        return a.ApplyArray(arr);
+    }
+
+    public static Layer[] operator /(Layer a, Layer[] arr)
+    {
+        Copy c = new();
+
+        for (int i = 0; i < arr.Length; i++) arr[i].ApplySeq(c);
+
+        c.ApplySeq(a);
+
+        return arr;
+    }
 }
