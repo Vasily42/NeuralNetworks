@@ -2,30 +2,13 @@ namespace NeuralNetwork;
 
 partial class Tensor
 {
-    public Tensor CutAxis1()
-    {
-        Tensor newTensor = this.shape.rank switch
-        {
-            1 => new Tensor(this.shape.n[1]),
-            2 => new Tensor(this.shape.n[2]),
-            3 => new Tensor(this.shape.n[2], this.shape.n[3]),
-            4 => new Tensor(this.shape.n[2], this.shape.n[3], this.shape.n[4]),
-            5 => new Tensor(this.shape.n[2], this.shape.n[3], this.shape.n[4], this.shape.n[5]),
-            6 => new Tensor(this.shape.n[2], this.shape.n[3], this.shape.n[4], this.shape.n[5], this.shape.n[6])
-        };
-
-        this.CopyTo(newTensor, 1);
-
-        return newTensor;
-    }
-
     public float IndexOfMax(int batch = 0)
     {
         int index = 0;
-        for (int i = 1; i < shape.flatBatchSize; i++)
+        for (int i = 1; i < shape.nF1; i++)
             if (this[batch, i] > this[index])
             {
-                index = batch * shape.flatBatchSize + i;
+                index = batch * shape.nF1 + i;
             }
 
         return index;
@@ -34,7 +17,7 @@ partial class Tensor
     public float Max(int batch = 0)
     {
         float max = this[0];
-        for (int i = 0; i < shape.flatBatchSize; i++)
+        for (int i = 0; i < shape.nF1; i++)
         {
             if (this[batch, i] > max)
             {
@@ -82,14 +65,14 @@ partial class Tensor
 
         int lastBatchSize = trainData.Length % miniBatchSize;
 
-        Tensor.ShapeInfo shape = trainData[0].shape.NeuralChange(miniBatchSize);
+        Tensor.ShapeInfo shape = trainData[0].shape.Change((0, miniBatchSize));
 
         for (int tt = 0; tt < tensorBatches.Length - 1; tt++)
         {
             tensorBatches[tt] = new Tensor(shape);
             for (int b = 0, s = 0; b < miniBatchSize; b++)
             {
-                for (int sb = 0; sb < shape.flatBatchSize; sb++, s++)
+                for (int sb = 0; sb < shape.nF1; sb++, s++)
                 {
                     tensorBatches[tt][s] = trainData[tt * miniBatchSize + b][sb];
                 }
@@ -98,11 +81,11 @@ partial class Tensor
 
         if (lastBatchSize != 0)
         {
-            var lastShape = shape.NeuralChange(lastBatchSize);
+            var lastShape = shape.Change((0,lastBatchSize));
             tensorBatches[^1] = new Tensor(lastShape);
             for (int b = 0, s = 0; b < lastBatchSize; b++)
             {
-                for (int sb = 0; sb < lastShape.flatBatchSize; sb++, s++)
+                for (int sb = 0; sb < lastShape.nF1; sb++, s++)
                     tensorBatches[^1][s] = trainData[^(lastBatchSize - b)][sb];
             }
         }
@@ -111,7 +94,7 @@ partial class Tensor
             tensorBatches[^1] = new Tensor(shape);
             for (int b = 0, s = 0; b < miniBatchSize; b++)
             {
-                for (int sb = 0; sb < shape.flatBatchSize; sb++, s++)
+                for (int sb = 0; sb < shape.nF1; sb++, s++)
                     tensorBatches[^1][s] = trainData[^(miniBatchSize - b)][sb];
             }
         }

@@ -1,5 +1,6 @@
 namespace NeuralNetwork;
 
+[Serializable]
 public unsafe class Convolution2D : Layer, IParameterized
 {
     private Tensor kernel, kernelGradient, bias, biasGradient;
@@ -19,12 +20,12 @@ public unsafe class Convolution2D : Layer, IParameterized
     public Convolution2D(int numberOfFilters,
     (byte x, byte y) kernelSize,
     (byte x, byte y) strides,
-    string activationFunction = "linear",
+    ActivationLayer activationFunction = null,
     string padding = "same",
     string parameterInitialization = "kaiming",
     Regularization kernelReg = null,
     Regularization biasReg = null,
-    bool NonTrainable = false)
+    bool NonTrainable = false, string name = null) : base(name)
     {
         this.numberOfFilters = numberOfFilters;
         this.kernelSize = kernelSize;
@@ -37,7 +38,7 @@ public unsafe class Convolution2D : Layer, IParameterized
         this.kernelReg = kernelReg;
         this.biasReg = biasReg;
         this.NonTrainable = NonTrainable;
-        InsertActivation(activationFunction);
+        activationFunction?.Apply(this);
         randomInitNum = parameterInitialization switch
         {
             "xavier" => Xavier,
@@ -47,26 +48,26 @@ public unsafe class Convolution2D : Layer, IParameterized
 
     public sealed override void Init(Optimizer optimizer)
     {
-        int outXLength = (int)((inputShape.xLength - kernelSize.x) / (float)strides.x + 1);
-        int outYLength = (int)((inputShape.yLength - kernelSize.y) / (float)strides.y + 1);
+        int outXLength = (int)((inputShape.n3 - kernelSize.x) / (float)strides.x + 1);
+        int outYLength = (int)((inputShape.n2 - kernelSize.y) / (float)strides.y + 1);
 
-        outputShape = inputShape.NeuralChange(
-        channels: numberOfFilters, xLength: outXLength, yLength: outYLength);
+        outputShape = inputShape.Change(
+        (1, numberOfFilters), (3, outXLength), (2, outYLength));
 
         inputDerivatives = new Tensor(inputShape);
         input = new Tensor(inputShape);
         output = new Tensor(outputShape);
         outputDerivatives = new Tensor(outputShape);
 
-        bias = new Tensor(outputShape.channels).Fill(0);
-        biasGradient = new Tensor(outputShape.channels).Fill(0);
+        bias = new Tensor(outputShape.nF1).Fill(0);
+        biasGradient = new Tensor(outputShape.nF1).Fill(0);
         biasOpt = optimizer.GetCopy();
-        biasOpt.Init(bias.shape.flatSize);
+        biasOpt.Init(bias.shape.nF0);
 
-        kernel = new Tensor(numberOfFilters, inputShape.channels, kernelSize.y, kernelSize.x).Fill(randomInitNum);
-        kernelGradient = new Tensor(numberOfFilters, inputShape.channels, kernelSize.y, kernelSize.x).Fill(0);
+        kernel = new Tensor(numberOfFilters, inputShape.n1, kernelSize.y, kernelSize.x).Fill(randomInitNum);
+        kernelGradient = new Tensor(numberOfFilters, inputShape.n1, kernelSize.y, kernelSize.x).Fill(0);
         kernelOpt = optimizer.GetCopy();
-        kernelOpt.Init(kernel.shape.flatSize);
+        kernelOpt.Init(kernel.shape.nF0);
     }
 
     public void Reset()
@@ -83,18 +84,18 @@ public unsafe class Convolution2D : Layer, IParameterized
     protected sealed override void ForwardAction(int batch)
     {
         float sum = 0;
-        for (int filter = 0; filter < outputShape.channels; filter++)
-            for (int iOut = 0; iOut < outputShape.yLength; iOut++)
-                for (int jOut = 0; jOut < outputShape.xLength; jOut++)
+        for (int filter = 0; filter < outputShape.n1; filter++)
+            for (int iOut = 0; iOut < outputShape.n2; iOut++)
+                for (int jOut = 0; jOut < outputShape.n3; jOut++)
                 {
                     this.output[batch, filter, iOut, jOut] = bias[filter];
                 }
 
         for (int filter = 0; filter < numberOfFilters; filter++)
-            for (int inputChannel = 0; inputChannel < inputShape.channels; inputChannel++)
+            for (int inputChannel = 0; inputChannel < inputShape.n1; inputChannel++)
             {
-                for (int i = 0, iOut = 0; iOut < outputShape.yLength; i += strides.y, iOut++)
-                    for (int j = 0, jOut = 0; jOut < outputShape.xLength; j += strides.x, jOut++)
+                for (int i = 0, iOut = 0; iOut < outputShape.n2; i += strides.y, iOut++)
+                    for (int j = 0, jOut = 0; jOut < outputShape.n3; j += strides.x, jOut++)
                     {
                         for (int y = 0; y < kernelSize.y; y++)
                             for (int x = 0; x < kernelSize.x; x++)
@@ -111,10 +112,10 @@ public unsafe class Convolution2D : Layer, IParameterized
     protected sealed override void BackPropAction(int batch)
     {
         for (int filter = 0; filter < numberOfFilters; filter++)
-            for (int inputChannel = 0; inputChannel < inputShape.channels; inputChannel++)
+            for (int inputChannel = 0; inputChannel < inputShape.n1; inputChannel++)
             {
-                for (int i = 0, iOut = 0; iOut < outputShape.yLength; i += strides.y, iOut++)
-                    for (int j = 0, jOut = 0; jOut < outputShape.xLength; j += strides.x, jOut++)
+                for (int i = 0, iOut = 0; iOut < outputShape.n2; i += strides.y, iOut++)
+                    for (int j = 0, jOut = 0; jOut < outputShape.n3; j += strides.x, jOut++)
                     {
                         for (int y = 0; y < kernelSize.y; y++)
                             for (int x = 0; x < kernelSize.x; x++)
@@ -125,9 +126,9 @@ public unsafe class Convolution2D : Layer, IParameterized
                     }
             }
 
-        for (int filter = 0; filter < outputShape.channels; filter++)
-            for (int iOut = 0; iOut < outputShape.yLength; iOut++)
-                for (int jOut = 0; jOut < outputShape.xLength; jOut++)
+        for (int filter = 0; filter < outputShape.n1; filter++)
+            for (int iOut = 0; iOut < outputShape.n2; iOut++)
+                for (int jOut = 0; jOut < outputShape.n3; jOut++)
                 {
                     biasGradient[filter] += outputDerivatives[batch, filter, iOut, jOut];
                 }
@@ -144,6 +145,6 @@ public unsafe class Convolution2D : Layer, IParameterized
         kernelOpt.Update(kernel, kernelGradient);
     }
 
-    float Xavier() => MathF.Sqrt(6f / (kernelSize.x * kernelSize.y * inputShape.channels + kernelSize.x * kernelSize.y * outputShape.channels) * (2 * StGeneral.NextFloat() - 1));
-    float Kaiming() => MathF.Sqrt(2f / (kernelSize.x * kernelSize.y * inputShape.channels)) * (2 * StGeneral.NextFloat() - 1);
+    float Xavier() => MathF.Sqrt(6f / (kernelSize.x * kernelSize.y * inputShape.n1 + kernelSize.x * kernelSize.y * outputShape.n1) * (2 * StGeneral.NextFloat() - 1));
+    float Kaiming() => MathF.Sqrt(2f / (kernelSize.x * kernelSize.y * inputShape.n1)) * (2 * StGeneral.NextFloat() - 1);
 }

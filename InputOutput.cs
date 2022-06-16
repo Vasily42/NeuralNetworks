@@ -1,9 +1,10 @@
 namespace NeuralNetwork;
 
+[Serializable]
 public unsafe class Input : Layer
 {
     public event Action<Tensor> OnBackPropEnd;
-    public Input(Tensor.ShapeInfo shape)
+    public Input(Tensor.ShapeInfo shape, string name = null) : base(name)
     {
         this.inputShape = shape;
         outputShape = inputShape;
@@ -16,8 +17,8 @@ public unsafe class Input : Layer
 
     public void Forward(Tensor input, bool training)
     {
-        int actualMBSize = input.shape.batchSize;
-        if (input.shape.flatSize % inputShape.flatBatchSize == 0)
+        int actualMBSize = input.shape.n0;
+        if (input.shape.nF0 % inputShape.nF1 == 0)
             nextLayer.Forward(input, in actualMBSize, in training);
         else throw new Exception("wrong format of input");
     }
@@ -35,8 +36,13 @@ public unsafe class Input : Layer
     }
 }
 
+[Serializable]
 public unsafe class Output : Layer
 {
+    public Output(string name = null) : base(name)
+    {
+    }
+
     public sealed override Tensor OutputTensor => output;
 
     public event Action<Tensor> OnForwardEnd;
@@ -55,7 +61,7 @@ public unsafe class Output : Layer
 
     public void BackProp(Tensor deriv)
     {
-        int actualMBSize = deriv.shape.batchSize;
+        int actualMBSize = deriv.shape.n0;
         if (deriv.shape.rank == inputShape.rank)
             prevLayer.BackProp(deriv, in actualMBSize);
         else prevLayer.BackProp(deriv.Reshape(inputShape), actualMBSize);

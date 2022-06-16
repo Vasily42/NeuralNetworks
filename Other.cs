@@ -6,11 +6,16 @@ interface IParameterized
     void Reset();
 }
 
+[Serializable]
 public class Flatten : Layer
 {
+    public Flatten(string name = null) : base(name)
+    {
+    }
+
     public sealed override void Init(Optimizer optimizer)
     {
-        outputShape = new(inputShape.batchSize, inputShape.flatBatchSize);
+        outputShape = new(inputShape.n0, inputShape.nF1);
     }
 
     public sealed override void Forward(Tensor input, in int actualMBSize, in bool training)
@@ -57,5 +62,4 @@ public class LayerCommander
     public void ResetForAll() { for (int i = 0; i < layers.Length; i++) layers[i].Reset(); }
     public void CorrectionForAll() { for (int i = 0; i < layers.Length; i++) layers[i].ParameterCorrection(); }
 }
-
 

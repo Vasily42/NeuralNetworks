@@ -27,26 +27,16 @@ public abstract class Model
 //     private Output[] outputs;
 //     private Loss[] losses;
 
-//     public void Init(Input[] inputs, Output[] outputs, dynamic optimizer, dynamic losses)
+//     public void Init(Input[] inputs, Output[] outputs, Optimizer optimizer, Loss[] losses)
 //     {
 //         this.inputs = inputs;
 //         this.outputs = outputs;
 
-//         if (losses is Loss[] arr)
-//             this.losses = arr;
-//         else if (losses is string[] arrStr)
-//             this.losses = arrStr.Select(s => Loss.CreateLoss(s)).ToArray();
-//         else throw new Exception("wrong format of losses");
+//         this.losses = losses;
 
 //         commander = new LayerCommander();
 
-//         Optimizer optimizer0;
-//         if (optimizer is string)
-//             optimizer0 = Optimizer.GetOptimizer(optimizer);
-//         else
-//             optimizer0 = optimizer;
-
-//         for (int i = 0; i < inputs.Length; i++) inputs[i].InitGraph(optimizer0, commander);
+//         for (int i = 0; i < inputs.Length; i++) inputs[i].InitGraph(optimizer, commander);
 //     }
 
 //     public void ForwardBatch(Tensor[] forwardData)
@@ -85,26 +75,17 @@ public sealed class Sequential : Model
         tempLayer = layer.Apply(tempLayer);
     }
 
-    public void Init(dynamic optimizer, dynamic loss = null)
+    public void Init(Optimizer optimizer, Loss loss)
     {
-        Optimizer optimizer0;
-        if (optimizer is string)
-            optimizer0 = Optimizer.GetOptimizer(optimizer);
-        else
-            optimizer0 = optimizer;
-
+        this.loss = loss;
+        
         if (tempLayer is Output o)
         lastLayer = o;
         else lastLayer = (Output)new Output().Apply(tempLayer);
 
-        if (loss is string)
-            this.loss = Loss.CreateLoss(loss);
-        else
-            this.loss = loss;
-
         commander = new LayerCommander();
 
-        firstLayer.InitGraph(optimizer0, commander);
+        firstLayer.InitGraph(optimizer, commander);
 
         Training = true;
         Initialized = true;
@@ -135,7 +116,7 @@ public sealed class Sequential : Model
 
         //ErrorRendering?.Invoke(loss.LossValue);
 
-        commander.CorrectionForAll();
+        //commander.CorrectionForAll();
 
         iteration++;
     }
@@ -161,8 +142,8 @@ public sealed class Sequential : Model
 
         if (!batched) 
         {
-            forwardData = Tensor.GetTrainBatches(forwardData, firstLayer.inputShape.batchSize);
-            backPropData =  Tensor.GetTrainBatches(backPropData, firstLayer.inputShape.batchSize);
+            forwardData = Tensor.GetTrainBatches(forwardData, firstLayer.inputShape.n0);
+            backPropData =  Tensor.GetTrainBatches(backPropData, firstLayer.inputShape.n0);
         }
 
         for (int epoch = 0; epoch < epochsToTrain; epoch++)
@@ -182,8 +163,8 @@ public sealed class Sequential : Model
 
     public void Train(Array[] forwardData, Array[] backPropData, int epochsToTrain = 1)
     {
-        Tensor[] batchesForward = Tensor.GetTrainBatches(forwardData, firstLayer.inputShape.batchSize);
-        Tensor[] batchesBackProp = Tensor.GetTrainBatches(backPropData, firstLayer.inputShape.batchSize);
+        Tensor[] batchesForward = Tensor.GetTrainBatches(forwardData, firstLayer.inputShape.n0);
+        Tensor[] batchesBackProp = Tensor.GetTrainBatches(backPropData, firstLayer.inputShape.n0);
 
         Train(batchesForward, batchesBackProp, epochsToTrain, batched: true);
     }

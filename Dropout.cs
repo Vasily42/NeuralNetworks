@@ -1,5 +1,6 @@
 namespace NeuralNetwork;
 
+[Serializable]
 public unsafe class Dropout : Layer
 {
     private readonly ushort dropoutRate;
@@ -9,7 +10,7 @@ public unsafe class Dropout : Layer
     private readonly Random rndDropout;
     private bool[] dropped;
 
-    public Dropout(float dropoutRate)
+    public Dropout(float dropoutRate, string name = null) : base(name)
     {
         this.dropoutRateFloat = (float)Math.Round(dropoutRate, 3);
         this.dropoutRate = (ushort)(1000 * dropoutRateFloat);
@@ -26,7 +27,7 @@ public unsafe class Dropout : Layer
 
         outputDerivatives = new Tensor(outputShape);
 
-        dropped = new bool[inputShape.flatBatchSize];
+        dropped = new bool[inputShape.nF1];
     }
 
     public sealed override void Forward(Tensor input, in int actualMBSize, in bool training)
@@ -37,7 +38,7 @@ public unsafe class Dropout : Layer
         {
             for (int batch = 0; batch < actualMBSize; batch++)
             {
-                for (int flat = 0; flat < inputShape.flatBatchSize; flat++)
+                for (int flat = 0; flat < inputShape.nF1; flat++)
                     this.input[batch, flat] *= invDropoutRateFloat;
             }
         }
@@ -69,7 +70,7 @@ public unsafe class Dropout : Layer
 
     public void Drop(Tensor input, in int batch)
     {
-        for (int i = 0; i < inputShape.flatBatchSize; i++)
+        for (int i = 0; i < inputShape.nF1; i++)
             if (dropped[i]) input[batch, i] = 0;
             else input[batch, i] *= qCoeff;
     }

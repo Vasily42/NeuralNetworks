@@ -2,12 +2,13 @@ using System.Numerics;
 
 namespace NeuralNetwork;
 
+[Serializable]
 public unsafe class Dense : Layer, IParameterized
 {
     private Tensor kernel, kernelGradient, bias, biasGradient;
 
     Optimizer kernelOpt, biasOpt;
-    
+
     Regularization kernelReg, biasReg;
 
     private readonly int numOfNeurons;
@@ -16,14 +17,14 @@ public unsafe class Dense : Layer, IParameterized
 
     protected readonly bool NonTrainable;
 
-    public Dense(int numOfNeurons, string activationFunction = "linear", string parameterInitialization = "kaiming", Regularization kernelReg = null,
-    Regularization biasReg = null, bool NonTrainable = false)
+    public Dense(int numOfNeurons, ActivationLayer activationFunction = null, string parameterInitialization = "kaiming", Regularization kernelReg = null,
+    Regularization biasReg = null, bool NonTrainable = false, string name = null) : base(name)
     {
         this.numOfNeurons = numOfNeurons;
         this.kernelReg = kernelReg;
         this.biasReg = biasReg;
         this.NonTrainable = NonTrainable;
-        InsertActivation(activationFunction);
+        activationFunction?.Apply(this);
         randomInitNum = parameterInitialization switch
         {
             "xavier" => Xavier,
@@ -33,32 +34,32 @@ public unsafe class Dense : Layer, IParameterized
 
     public sealed override void Init(Optimizer optimizer)
     {
-        outputShape = inputShape.NeuralChange(xLength: numOfNeurons);
+        outputShape = inputShape.Change((1, numOfNeurons));
 
         input = new Tensor(inputShape);
         inputDerivatives = new Tensor(inputShape);
         output = new Tensor(outputShape);
         outputDerivatives = new Tensor(outputShape);
 
-        bias = new Tensor(outputShape.xLength).Fill(0);
-        biasGradient = new Tensor(outputShape.xLength).Fill(0);
+        bias = new Tensor(outputShape.n1).Clear();
+        biasGradient = new Tensor(outputShape.n1).Clear();
         biasOpt = optimizer.GetCopy();
-        biasOpt.Init(bias.shape.flatSize);
+        biasOpt.Init(bias.shape.nF0);
 
-        kernel = new Tensor(inputShape.xLength, outputShape.xLength).Fill(randomInitNum);
-        kernelGradient = new Tensor(inputShape.xLength, outputShape.xLength).Fill(0);
+        kernel = new Tensor(outputShape.n1, inputShape.n1).Fill(randomInitNum);
+        kernelGradient = new Tensor(outputShape.n1, inputShape.n1).Clear();
         kernelOpt = optimizer.GetCopy();
-        kernelOpt.Init(kernel.shape.flatSize);
+        kernelOpt.Init(kernel.shape.nF0);
     }
 
     public void Reset()
     {
-        bias.Fill(0);
-        biasGradient.Fill(0);
+        bias.Clear();
+        biasGradient.Clear();
         biasOpt.Reset();
 
         kernel.Fill(randomInitNum);
-        kernelGradient.Fill(0);
+        kernelGradient.Clear();
         kernelOpt.Reset();
     }
 
@@ -66,19 +67,9 @@ public unsafe class Dense : Layer, IParameterized
     {
         float sum;
 
-        var vecLen = Vector<float>.Count;
-
-        int iB, i = 0;
-
-        for (int nthis = 0; nthis < outputShape.xLength; nthis++)
+        for (int nthis = 0; nthis < outputShape.n1; nthis++)
         {
-            sum = 0;
-
-            for (int nnext = 0; nnext < inputShape.xLength; nnext++)
-            {
-                sum += this.input[batch, nnext] * kernel[nnext, nthis];
-            }
-
+            sum = Tensor.Dot(input, kernel, inputShape.Point(batch, 0), kernel.shape.Point(nthis, 0), inputShape.nF1);
             sum += bias[nthis];
             this.output[batch, nthis] = sum;
         }
@@ -86,18 +77,36 @@ public unsafe class Dense : Layer, IParameterized
 
     protected sealed override void BackPropAction(int batch)
     {
-        for (int nthis = 0; nthis < outputShape.xLength; nthis++)
-        {
-            biasGradient[nthis] += outputDerivatives[batch, nthis];
-        }
+        int index = inputShape.Point(batch, 0);
+        int length = inputShape.n1;
 
-        for (int nnext = 0; nnext < inputShape.xLength; nnext++)
+        inputDerivatives.Clear(index, length);
+
+        int remainA, remainB;
+
+        var aVec = inputDerivatives.GetSpanVectors(out remainA, index, length);
+        var dVec = input.GetSpanVectors(index, length);
+
+        for (int nthis = 0; nthis < outputShape.n1; nthis++)
         {
-            inputDerivatives[batch, nnext] = 0;
-            for (int nthis = 0; nthis < outputShape.xLength; nthis++)
+            index = kernel.shape.Point(nthis, 0);
+
+            biasGradient[nthis] += outputDerivatives[batch, nthis];
+
+            var bVec = kernel.GetSpanVectors(out remainB, index, length);
+            var gVec = kernelGradient.GetSpanVectors(index, length);
+            var cVec = new Vector<float>(outputDerivatives[batch, nthis]);
+
+            for (int i = 0; i < bVec.Length; i++)
             {
-                kernelGradient[nnext, nthis] += this.input[batch, nnext] * outputDerivatives[batch, nthis];
-                inputDerivatives[batch, nnext] += kernel[nnext, nthis] * outputDerivatives[batch, nthis];
+                aVec[i] += bVec[i] * cVec;
+                gVec[i] += dVec[i] * cVec;
+            }
+
+            for (int i = 0; i < inputShape.n1 % Tensor.vecCount; i++)
+            {
+                inputDerivatives[remainA + i] += outputDerivatives[batch, nthis] * kernel[remainB + i];
+                kernelGradient[remainB + i] += input[remainA + i] * outputDerivatives[batch, nthis];
             }
         }
     }
@@ -106,19 +115,19 @@ public unsafe class Dense : Layer, IParameterized
     {
         if (NonTrainable) return;
 
-        biasGradient /= inputShape.batchSize;
+        biasGradient /= inputShape.n0;
 
         biasReg?.GradPenalty(bias, biasGradient);
         biasOpt.Update(bias, biasGradient);
 
-        kernelGradient /= inputShape.batchSize;
+        kernelGradient /= inputShape.n0;
 
         kernelReg?.GradPenalty(kernel, kernelGradient);
         kernelOpt.Update(kernel, kernelGradient);
 
     }
 
-    float Xavier() => MathF.Sqrt(6f / (inputShape.xLength + outputShape.xLength)) * (2 * StGeneral.NextFloat() - 1);
+    float Xavier() => MathF.Sqrt(6f / (inputShape.n1 + outputShape.n1)) * (2 * StGeneral.NextFloat() - 1);
 
-    float Kaiming() => MathF.Sqrt(2f / inputShape.xLength) * (2 * StGeneral.NextFloat() - 1);
+    float Kaiming() => MathF.Sqrt(2f / inputShape.n1) * (2 * StGeneral.NextFloat() - 1);
 }

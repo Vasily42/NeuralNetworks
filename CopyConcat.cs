@@ -1,13 +1,16 @@
-using System.Dynamic;
-
 namespace NeuralNetwork;
 
+[Serializable]
 public class Copy : Layer
 {
     internal Layer[] nextLayers;
     internal new Tensor[] outputDerivatives;
 
     private int pulled;
+
+    public Copy(string name = null) : base(name)
+    {
+    }
 
     protected sealed override void ConnectToSeq(Layer nextLayer)
     {
@@ -53,7 +56,7 @@ public class Copy : Layer
         {
             inputDerivatives.Fill(0);
             for (int i = 0; i < outputDerivatives.Length; i++)
-                for (int j = 0; j < inputDerivatives.shape.flatSize; j++) inputDerivatives[j] += outputDerivatives[i][j];
+                for (int j = 0; j < inputDerivatives.shape.n0; j++) inputDerivatives[j] += outputDerivatives[i][j];
 
             pulled = 0;
 
@@ -86,6 +89,10 @@ public class Concat : Layer
     internal new Tensor[] inputDerivatives, inputs;
 
     private int pulled, axis;
+
+    public Concat(string name = null) : base(name)
+    {
+    }
 
     internal sealed override Layer ApplySeq(Layer prevLayer)
     {
@@ -139,7 +146,7 @@ public class Concat : Layer
         inputDerivatives = new Tensor[inputShapes.Length];
         for (int i = 0; i < inputShapes[0].rank; i++)
         {
-            if (inputShapes[0].n[i] != inputShapes[1].n[i])
+            if (inputShapes[0][i] != inputShapes[1][i])
             {
                 axis = i;
                 break;
@@ -154,13 +161,13 @@ public class Concat : Layer
         {
             inputs[i] = new(inputShapes[i]);
             inputDerivatives[i] = new(inputShapes[i]);
-            modShape[i] = inputShapes[i].nF[axis];
+            modShape[i] = inputShapes[i].NF[axis];
             outConcatFlatSize += modShape[i];
         }
 
-        outputShape = inputShapes[0].Change((axis, inputShapes.Select(x => x.n[axis]).Sum()));
+        outputShape = inputShapes[0].Change((axis, inputShapes.Select(x => x[axis]).Sum()));
 
-        nFRev = inputs[0].shape.flatSize / modShape[0];
+        nFRev = inputs[0].shape.n0 / modShape[0];
 
         output = new(outputShape);
     }

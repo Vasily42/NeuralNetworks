@@ -1,5 +1,6 @@
 namespace NeuralNetwork;
 
+[Serializable]
 public unsafe class Pooling2D : Layer
 {
     private delegate void PoolingMethod(int batch);
@@ -15,7 +16,7 @@ public unsafe class Pooling2D : Layer
     public Pooling2D(string method,
     (byte x, byte y) sizeOfPooling,
     (byte x, byte y) strides,
-    string padding = "valid")
+    string padding = "valid", string name = null) : base(name)
     {
         this.method = method;
         this.sizeOfPooling = sizeOfPooling;
@@ -31,10 +32,10 @@ public unsafe class Pooling2D : Layer
     {
         InitDelegates();
 
-        int outXLength = (int)((inputShape.xLength - sizeOfPooling.x) / (float)strides.x + 1);
-        int outYLength = (int)((inputShape.yLength - sizeOfPooling.y) / (float)strides.y + 1);
+        int outXLength = (int)((inputShape.n3 - sizeOfPooling.x) / (float)strides.x + 1);
+        int outYLength = (int)((inputShape.n2 - sizeOfPooling.y) / (float)strides.y + 1);
 
-        outputShape = inputShape.NeuralChange(xLength: outXLength, yLength: outYLength);
+        outputShape = inputShape.Change((3, outXLength), (2, outYLength));
 
         input = new Tensor(inputShape);
         inputDerivatives = new Tensor(inputShape);
@@ -43,7 +44,7 @@ public unsafe class Pooling2D : Layer
 
         inputDerivatives.Fill(0);
 
-        indexedOut = new (ushort y, ushort x)[inputShape.batchSize, inputShape.channels,
+        indexedOut = new (ushort y, ushort x)[inputShape.n0, inputShape.n1,
         outYLength, outXLength];
     }
 
@@ -73,9 +74,9 @@ public unsafe class Pooling2D : Layer
     private void Max(int batch)
     {
         float max = 0;
-        for (int inputChannel = 0; inputChannel < inputShape.channels; inputChannel++)
-            for (int i = 0, iOut = 0; iOut < outputShape.yLength; i += strides.y, iOut++)
-                for (int j = 0, jOut = 0; jOut < outputShape.xLength; j += strides.x, jOut++)
+        for (int inputChannel = 0; inputChannel < inputShape.n1; inputChannel++)
+            for (int i = 0, iOut = 0; iOut < outputShape.n2; i += strides.y, iOut++)
+                for (int j = 0, jOut = 0; jOut < outputShape.n3; j += strides.x, jOut++)
                 {
                     for (int y = 0; y < sizeOfPooling.y; y++)
                         for (int x = 0; x < sizeOfPooling.x; x++)
@@ -99,9 +100,9 @@ public unsafe class Pooling2D : Layer
     private void Min(int batch)
     {
         float min = 0;
-        for (int inputChannel = 0; inputChannel < inputShape.channels; inputChannel++)
-            for (int i = 0, iOut = 0; iOut < outputShape.yLength; i += strides.y, iOut++)
-                for (int j = 0, jOut = 0; jOut < outputShape.xLength; j += strides.x, jOut++)
+        for (int inputChannel = 0; inputChannel < inputShape.n1; inputChannel++)
+            for (int i = 0, iOut = 0; iOut < outputShape.n2; i += strides.y, iOut++)
+                for (int j = 0, jOut = 0; jOut < outputShape.n3; j += strides.x, jOut++)
                 {
                     for (int y = 0; y < sizeOfPooling.y; y++)
                         for (int x = 0; x < sizeOfPooling.x; x++)
@@ -125,9 +126,9 @@ public unsafe class Pooling2D : Layer
     private void Average(int batch)
     {
         float sum;
-        for (int inputChannel = 0; inputChannel < inputShape.channels; inputChannel++)
-            for (int i = 0, iOut = 0; iOut < outputShape.yLength; i += strides.y, iOut++)
-                for (int j = 0, jOut = 0; jOut < outputShape.xLength; j += strides.x, jOut++)
+        for (int inputChannel = 0; inputChannel < inputShape.n1; inputChannel++)
+            for (int i = 0, iOut = 0; iOut < outputShape.n2; i += strides.y, iOut++)
+                for (int j = 0, jOut = 0; jOut < outputShape.n3; j += strides.x, jOut++)
                 {
                     sum = 0;
                     for (int y = 0; y < sizeOfPooling.y; y++)
@@ -143,9 +144,9 @@ public unsafe class Pooling2D : Layer
 
     private void BackMaxMin(int batch)
     {
-        for (int inputChannel = 0; inputChannel < inputShape.channels; inputChannel++)
-            for (int iOut = 0; iOut < outputShape.yLength; iOut++)
-                for (int jOut = 0; jOut < outputShape.xLength; jOut++)
+        for (int inputChannel = 0; inputChannel < inputShape.n1; inputChannel++)
+            for (int iOut = 0; iOut < outputShape.n2; iOut++)
+                for (int jOut = 0; jOut < outputShape.n3; jOut++)
                 {
                     inputDerivatives[batch, inputChannel, indexedOut[batch, inputChannel, iOut, jOut].y,
                     indexedOut[batch, inputChannel, iOut, jOut].x] += outputDerivatives[batch, inputChannel, iOut, jOut];
@@ -156,9 +157,9 @@ public unsafe class Pooling2D : Layer
     {
         float averageDelta;
 
-        for (int inputChannel = 0; inputChannel < outputShape.channels; inputChannel++)
-            for (int i = 0, iOut = 0; iOut < outputShape.yLength; i += strides.y, iOut++)
-                for (int j = 0, jOut = 0; jOut < outputShape.xLength; j += strides.x, jOut++)
+        for (int inputChannel = 0; inputChannel < outputShape.n1; inputChannel++)
+            for (int i = 0, iOut = 0; iOut < outputShape.n2; i += strides.y, iOut++)
+                for (int j = 0, jOut = 0; jOut < outputShape.n3; j += strides.x, jOut++)
                 {
                     averageDelta = outputDerivatives[batch, inputChannel, iOut, jOut] / (sizeOfPooling.x * sizeOfPooling.y);
                     for (int y = 0; y < sizeOfPooling.y; y++)

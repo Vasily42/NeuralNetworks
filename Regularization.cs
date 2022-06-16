@@ -14,7 +14,7 @@ public class Regularization
 
     public void GradPenalty(Tensor weights, Tensor gradient)
     {
-        for (int i = 0; i < weights.shape.flatSize; i++)
+        for (int i = 0; i < weights.shape.nF0; i++)
         {
             gradient[i] += l2 * weights[i];
             gradient[i] += Math.Sign(weights[i]) * l1;
